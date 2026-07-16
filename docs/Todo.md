@@ -194,10 +194,10 @@
   - `test:e2e`
 - [x] 新增 Vitest config。
 - [x] 新增 Testing Library setup file。
-- [ ] 新增 MSW browser/server test setup。
-- [ ] 新增 Playwright config。
+- [x] 新增 MSW browser/server test setup。
+- [x] 新增 Playwright config。
 - [x] 測試 auth API client 使用 credentialed login request。
-- [ ] 測試 auth `401` redirect。
+- [x] 測試 auth `401` redirect。
 - [x] 測試 API error helper。
 - [x] 測試 workspace 預設選取第一個可用 lesson 的 helper。
 - [x] 測試 debounced save behavior。
