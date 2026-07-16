@@ -5,6 +5,7 @@ import {
   BookOpen,
   Braces,
   ChevronDown,
+  ChevronRight,
   CircleAlert,
   FileText,
   Folder,
@@ -18,6 +19,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import type { ReactNode } from "react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -68,12 +70,21 @@ import type {
   LessonSummary,
   Notebook,
   NotebookTree,
+  UpdateChapterInput,
   UpdateNotebookInput,
   UUID,
 } from "@/lib/code-notebook/types";
 import { cn } from "@/lib/utils";
 
 type WorkspaceState = ReturnType<typeof useNotebookWorkspace>;
+type WorkspaceTreeActions = {
+  onCreateChapter: () => void;
+  onRenameChapter: (chapter: Chapter) => void;
+  onToggleChapter: (chapter: Chapter) => void;
+  onDeleteChapter: (chapter: Chapter) => void;
+};
+type WorkspaceViewState = WorkspaceState & WorkspaceTreeActions;
+type ChapterTitleInput = { title: string };
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof ApiError ? error.message : fallback;
@@ -395,14 +406,188 @@ function DeleteNotebookDialog({
   );
 }
 
+function ChapterDialog({
+  mode,
+  chapter,
+  open,
+  isSubmitting,
+  error,
+  onOpenChange,
+  onSubmit,
+}: {
+  mode: "create" | "edit";
+  chapter: Chapter | null;
+  open: boolean;
+  isSubmitting: boolean;
+  error: string | null;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (input: ChapterTitleInput) => void;
+}) {
+  const dialogTitle = mode === "create" ? "新增章節" : "重新命名章節";
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      {open ? (
+        <ChapterDialogForm
+          key={`${mode}-${chapter?.id ?? "new"}`}
+          dialogTitle={dialogTitle}
+          mode={mode}
+          chapter={chapter}
+          isSubmitting={isSubmitting}
+          error={error}
+          onOpenChange={onOpenChange}
+          onSubmit={onSubmit}
+        />
+      ) : null}
+    </Dialog>
+  );
+}
+
+function ChapterDialogForm({
+  dialogTitle,
+  mode,
+  chapter,
+  isSubmitting,
+  error,
+  onOpenChange,
+  onSubmit,
+}: {
+  dialogTitle: string;
+  mode: "create" | "edit";
+  chapter: Chapter | null;
+  isSubmitting: boolean;
+  error: string | null;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (input: ChapterTitleInput) => void;
+}) {
+  const [title, setTitle] = useState(() =>
+    mode === "edit" && chapter ? chapter.title : "",
+  );
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  return (
+    <DialogContent>
+      <DialogHeader>
+        <DialogTitle>{dialogTitle}</DialogTitle>
+        <DialogDescription>
+          章節會顯示在左側目錄中，用來分組 lesson。
+        </DialogDescription>
+      </DialogHeader>
+      <form
+        className="space-y-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const normalizedTitle = title.trim();
+
+          if (!normalizedTitle) {
+            setLocalError("請輸入章節名稱。");
+            return;
+          }
+
+          setLocalError(null);
+          onSubmit({ title: normalizedTitle });
+        }}
+      >
+        <div className="space-y-2">
+          <label className="text-sm font-medium" htmlFor="chapter-title">
+            名稱
+          </label>
+          <Input
+            id="chapter-title"
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="例如：第一章 基礎"
+            aria-invalid={Boolean(localError || error)}
+            disabled={isSubmitting}
+          />
+        </div>
+        {localError || error ? (
+          <p className="text-sm text-destructive" role="alert">
+            {localError ?? error}
+          </p>
+        ) : null}
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={isSubmitting}
+          >
+            取消
+          </Button>
+          <Button type="submit" disabled={isSubmitting}>
+            {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : null}
+            {mode === "create" ? "建立" : "儲存"}
+          </Button>
+        </DialogFooter>
+      </form>
+    </DialogContent>
+  );
+}
+
+function DeleteChapterDialog({
+  chapter,
+  open,
+  isDeleting,
+  error,
+  onOpenChange,
+  onConfirm,
+}: {
+  chapter: Chapter | null;
+  open: boolean;
+  isDeleting: boolean;
+  error: string | null;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: () => void;
+}) {
+  const lessonCount = chapter?.lessons?.length ?? 0;
+
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogMedia>
+            <AlertTriangle className="size-5 text-destructive" />
+          </AlertDialogMedia>
+          <AlertDialogTitle>刪除章節</AlertDialogTitle>
+          <AlertDialogDescription>
+            {chapter
+              ? `確定要刪除「${chapter.title}」嗎？這會一併移除其中 ${lessonCount} 個 lesson。`
+              : "確定要刪除這個章節嗎？"}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        {error ? (
+          <p className="text-sm text-destructive" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={isDeleting}>取消</AlertDialogCancel>
+          <AlertDialogAction
+            type="button"
+            variant="destructive"
+            disabled={isDeleting}
+            onClick={onConfirm}
+          >
+            {isDeleting ? <Loader2 className="size-4 animate-spin" /> : null}
+            刪除
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 function EmptyState({
   icon: Icon,
   title,
   description,
+  action,
 }: {
   icon: typeof BookOpen;
   title: string;
   description: string;
+  action?: ReactNode;
 }) {
   return (
     <div className="flex h-full min-h-48 items-center justify-center px-6 text-center">
@@ -414,6 +599,7 @@ function EmptyState({
           <h2 className="text-sm font-semibold">{title}</h2>
           <p className="text-sm leading-6 text-muted-foreground">{description}</p>
         </div>
+        {action}
       </div>
     </div>
   );
@@ -455,6 +641,10 @@ function TreePanel({
   error,
   selectedLessonId,
   onSelectLesson,
+  onCreateChapter,
+  onRenameChapter,
+  onToggleChapter,
+  onDeleteChapter,
   onRetry,
 }: {
   tree: NotebookTree | null;
@@ -462,6 +652,10 @@ function TreePanel({
   error: unknown;
   selectedLessonId: UUID | null;
   onSelectLesson: (lessonId: UUID) => void;
+  onCreateChapter: () => void;
+  onRenameChapter: (chapter: Chapter) => void;
+  onToggleChapter: (chapter: Chapter) => void;
+  onDeleteChapter: (chapter: Chapter) => void;
   onRetry: () => void;
 }) {
   if (isLoading) {
@@ -492,24 +686,56 @@ function TreePanel({
       <EmptyState
         icon={Folder}
         title="這本筆記本還沒有章節"
-        description="下一階段會加入建立章節與 lesson 的操作。"
+        description="先建立第一個章節，再把 lesson 放進章節底下。"
+        action={
+          <Button type="button" size="sm" onClick={onCreateChapter}>
+            <Plus className="size-4" />
+            新增章節
+          </Button>
+        }
       />
     );
   }
 
   return (
-    <ScrollArea className="h-full">
-      <div className="space-y-3 p-3">
-        {tree.chapters.map((chapter) => (
-          <ChapterNode
-            key={chapter.id}
-            chapter={chapter}
-            selectedLessonId={selectedLessonId}
-            onSelectLesson={onSelectLesson}
-          />
-        ))}
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex h-10 shrink-0 items-center justify-between border-b px-3">
+        <span className="text-xs font-medium uppercase text-muted-foreground">Chapters</span>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={onCreateChapter}
+                  aria-label="新增章節"
+                >
+                  <Plus className="size-4" />
+                </Button>
+              }
+            />
+            <TooltipContent>新增章節</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </div>
-    </ScrollArea>
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="space-y-3 p-3">
+          {tree.chapters.map((chapter) => (
+            <ChapterNode
+              key={chapter.id}
+              chapter={chapter}
+              selectedLessonId={selectedLessonId}
+              onSelectLesson={onSelectLesson}
+              onRenameChapter={onRenameChapter}
+              onToggleChapter={onToggleChapter}
+              onDeleteChapter={onDeleteChapter}
+            />
+          ))}
+        </div>
+      </ScrollArea>
+    </div>
   );
 }
 
@@ -517,36 +743,109 @@ function ChapterNode({
   chapter,
   selectedLessonId,
   onSelectLesson,
+  onRenameChapter,
+  onToggleChapter,
+  onDeleteChapter,
 }: {
   chapter: Chapter;
   selectedLessonId: UUID | null;
   onSelectLesson: (lessonId: UUID) => void;
+  onRenameChapter: (chapter: Chapter) => void;
+  onToggleChapter: (chapter: Chapter) => void;
+  onDeleteChapter: (chapter: Chapter) => void;
 }) {
   const lessons = chapter.lessons ?? [];
 
   return (
     <section className="space-y-1">
-      <div className="flex min-h-8 items-center gap-2 rounded-md px-2 text-sm font-medium">
+      <div className="group flex min-h-8 items-center gap-1 rounded-md px-1 text-sm font-medium hover:bg-muted/60">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          onClick={() => onToggleChapter(chapter)}
+          aria-label={chapter.isCollapsed ? "展開章節" : "收合章節"}
+        >
+          {chapter.isCollapsed ? (
+            <ChevronRight className="size-3.5" />
+          ) : (
+            <ChevronDown className="size-3.5" />
+          )}
+        </Button>
         <Folder className="size-4 shrink-0 text-muted-foreground" />
-        <span className="min-w-0 truncate">{chapter.title}</span>
-        <Badge variant="outline" className="ml-auto">
+        <span className="min-w-0 flex-1 truncate">{chapter.title}</span>
+        <Badge variant="outline" className="shrink-0">
           {lessons.length}
         </Badge>
+        <div className="ml-1 flex shrink-0 items-center gap-0.5 opacity-100 md:opacity-0 md:transition-opacity md:group-hover:opacity-100">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-label="新增 lesson"
+                    disabled
+                  >
+                    <Plus className="size-3.5" />
+                  </Button>
+                }
+              />
+              <TooltipContent>新增 lesson 會在下一階段接上</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    onClick={() => onRenameChapter(chapter)}
+                    aria-label="重新命名章節"
+                  >
+                    <Pencil className="size-3.5" />
+                  </Button>
+                }
+              />
+              <TooltipContent>重新命名章節</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    onClick={() => onDeleteChapter(chapter)}
+                    aria-label="刪除章節"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                }
+              />
+              <TooltipContent>刪除章節</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
       </div>
-      <div className="space-y-1 pl-3">
-        {lessons.length === 0 ? (
-          <p className="px-2 py-1 text-xs text-muted-foreground">尚無 lesson</p>
-        ) : (
-          lessons.map((lesson) => (
-            <LessonButton
-              key={lesson.id}
-              lesson={lesson}
-              isSelected={lesson.id === selectedLessonId}
-              onSelectLesson={onSelectLesson}
-            />
-          ))
-        )}
-      </div>
+      {chapter.isCollapsed ? null : (
+        <div className="space-y-1 pl-6">
+          {lessons.length === 0 ? (
+            <p className="px-2 py-1 text-xs text-muted-foreground">尚無 lesson</p>
+          ) : (
+            lessons.map((lesson) => (
+              <LessonButton
+                key={lesson.id}
+                lesson={lesson}
+                isSelected={lesson.id === selectedLessonId}
+                onSelectLesson={onSelectLesson}
+              />
+            ))
+          )}
+        </div>
+      )}
     </section>
   );
 }
@@ -697,7 +996,7 @@ function OutputPanel({ lesson }: { lesson: Lesson | null }) {
   );
 }
 
-function DesktopWorkspace(state: WorkspaceState) {
+function DesktopWorkspace(state: WorkspaceViewState) {
   return (
     <ResizablePanelGroup orientation="horizontal" className="hidden min-h-0 flex-1 md:flex">
       <ResizablePanel defaultSize={22} minSize={16} maxSize={32}>
@@ -707,6 +1006,10 @@ function DesktopWorkspace(state: WorkspaceState) {
           error={state.treeQuery.error}
           selectedLessonId={state.selectedLessonId}
           onSelectLesson={state.setSelectedLessonId}
+          onCreateChapter={state.onCreateChapter}
+          onRenameChapter={state.onRenameChapter}
+          onToggleChapter={state.onToggleChapter}
+          onDeleteChapter={state.onDeleteChapter}
           onRetry={() => state.treeQuery.refetch()}
         />
       </ResizablePanel>
@@ -735,7 +1038,7 @@ function DesktopWorkspace(state: WorkspaceState) {
   );
 }
 
-function MobileWorkspace(state: WorkspaceState) {
+function MobileWorkspace(state: WorkspaceViewState) {
   return (
     <Tabs defaultValue="tree" className="min-h-0 flex-1 md:hidden">
       <TabsList className="mx-3 mt-3 grid h-9 w-auto grid-cols-4">
@@ -763,6 +1066,10 @@ function MobileWorkspace(state: WorkspaceState) {
           error={state.treeQuery.error}
           selectedLessonId={state.selectedLessonId}
           onSelectLesson={state.setSelectedLessonId}
+          onCreateChapter={state.onCreateChapter}
+          onRenameChapter={state.onRenameChapter}
+          onToggleChapter={state.onToggleChapter}
+          onDeleteChapter={state.onDeleteChapter}
           onRetry={() => state.treeQuery.refetch()}
         />
       </TabsContent>
@@ -790,11 +1097,24 @@ export function WorkspaceShell() {
   const [notebookDialogMode, setNotebookDialogMode] = useState<"create" | "edit">("create");
   const [isNotebookDialogOpen, setIsNotebookDialogOpen] = useState(false);
   const [isDeleteNotebookOpen, setIsDeleteNotebookOpen] = useState(false);
+  const [chapterDialogMode, setChapterDialogMode] = useState<"create" | "edit">("create");
+  const [isChapterDialogOpen, setIsChapterDialogOpen] = useState(false);
+  const [isDeleteChapterOpen, setIsDeleteChapterOpen] = useState(false);
+  const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null);
   const selectedNotebook =
     state.notebooks.find((notebook) => notebook.id === state.selectedNotebookId) ?? null;
   const isInitialLoading = state.notebooksQuery.isLoading;
   const isRefreshing =
     state.notebooksQuery.isFetching || state.treeQuery.isFetching || state.lessonQuery.isFetching;
+  const invalidateSelectedTree = () => {
+    if (!state.selectedNotebookId) {
+      return;
+    }
+
+    void queryClient.invalidateQueries({
+      queryKey: codeNotebookQueryKeys.notebooks.tree(state.selectedNotebookId),
+    });
+  };
   const createNotebookMutation = useMutation({
     mutationFn: codeNotebookApi.createNotebook,
     onSuccess: (data) => {
@@ -838,6 +1158,60 @@ export function WorkspaceShell() {
       });
     },
   });
+  const createChapterMutation = useMutation({
+    mutationFn: codeNotebookApi.createChapter,
+    onSuccess: () => {
+      setIsChapterDialogOpen(false);
+      setSelectedChapter(null);
+      toast.success("章節已建立");
+      invalidateSelectedTree();
+    },
+  });
+  const updateChapterMutation = useMutation({
+    mutationFn: ({
+      chapterId,
+      input,
+    }: {
+      chapterId: UUID;
+      input: UpdateChapterInput;
+    }) => codeNotebookApi.updateChapter(chapterId, input),
+    onSuccess: () => {
+      setIsChapterDialogOpen(false);
+      setSelectedChapter(null);
+      toast.success("章節已更新");
+      invalidateSelectedTree();
+    },
+  });
+  const toggleChapterMutation = useMutation({
+    mutationFn: ({
+      chapterId,
+      isCollapsed,
+    }: {
+      chapterId: UUID;
+      isCollapsed: boolean;
+    }) => codeNotebookApi.updateChapter(chapterId, { isCollapsed }),
+    onSuccess: () => {
+      invalidateSelectedTree();
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error, "章節收合狀態更新失敗"));
+    },
+  });
+  const deleteChapterMutation = useMutation({
+    mutationFn: codeNotebookApi.deleteChapter,
+    onSuccess: () => {
+      if (
+        selectedChapter?.lessons?.some((lesson) => lesson.id === state.selectedLessonId)
+      ) {
+        state.setSelectedLessonId(null);
+      }
+
+      setIsDeleteChapterOpen(false);
+      setSelectedChapter(null);
+      toast.success("章節已刪除");
+      invalidateSelectedTree();
+    },
+  });
 
   const notebookDialogError =
     getErrorMessage(createNotebookMutation.error, "") ||
@@ -846,6 +1220,48 @@ export function WorkspaceShell() {
   const deleteNotebookError = getErrorMessage(deleteNotebookMutation.error, "") || null;
   const isSubmittingNotebook =
     createNotebookMutation.isPending || updateNotebookMutation.isPending;
+  const chapterDialogError =
+    getErrorMessage(createChapterMutation.error, "") ||
+    getErrorMessage(updateChapterMutation.error, "") ||
+    null;
+  const deleteChapterError = getErrorMessage(deleteChapterMutation.error, "") || null;
+  const isSubmittingChapter =
+    createChapterMutation.isPending || updateChapterMutation.isPending;
+  const openCreateChapterDialog = () => {
+    if (!state.selectedNotebookId) {
+      return;
+    }
+
+    createChapterMutation.reset();
+    updateChapterMutation.reset();
+    setSelectedChapter(null);
+    setChapterDialogMode("create");
+    setIsChapterDialogOpen(true);
+  };
+  const openRenameChapterDialog = (chapter: Chapter) => {
+    createChapterMutation.reset();
+    updateChapterMutation.reset();
+    setSelectedChapter(chapter);
+    setChapterDialogMode("edit");
+    setIsChapterDialogOpen(true);
+  };
+  const openDeleteChapterDialog = (chapter: Chapter) => {
+    deleteChapterMutation.reset();
+    setSelectedChapter(chapter);
+    setIsDeleteChapterOpen(true);
+  };
+  const viewState: WorkspaceViewState = {
+    ...state,
+    onCreateChapter: openCreateChapterDialog,
+    onRenameChapter: openRenameChapterDialog,
+    onToggleChapter: (chapter) => {
+      toggleChapterMutation.mutate({
+        chapterId: chapter.id,
+        isCollapsed: !chapter.isCollapsed,
+      });
+    },
+    onDeleteChapter: openDeleteChapterDialog,
+  };
 
   if (isInitialLoading) {
     return <LoadingPanel label="正在載入工作區" />;
@@ -978,8 +1394,8 @@ export function WorkspaceShell() {
           </>
         ) : null}
       </div>
-      <DesktopWorkspace {...state} />
-      <MobileWorkspace {...state} />
+      <DesktopWorkspace {...viewState} />
+      <MobileWorkspace {...viewState} />
       <NotebookDialog
         mode={notebookDialogMode}
         notebook={selectedNotebook}
@@ -1015,6 +1431,50 @@ export function WorkspaceShell() {
           }
 
           deleteNotebookMutation.mutate(selectedNotebook.id);
+        }}
+      />
+      <ChapterDialog
+        mode={chapterDialogMode}
+        chapter={selectedChapter}
+        open={isChapterDialogOpen}
+        isSubmitting={isSubmittingChapter}
+        error={chapterDialogError}
+        onOpenChange={setIsChapterDialogOpen}
+        onSubmit={(input) => {
+          if (chapterDialogMode === "create") {
+            if (!state.selectedNotebookId) {
+              return;
+            }
+
+            createChapterMutation.mutate({
+              notebookId: state.selectedNotebookId,
+              title: input.title,
+            });
+            return;
+          }
+
+          if (!selectedChapter) {
+            return;
+          }
+
+          updateChapterMutation.mutate({
+            chapterId: selectedChapter.id,
+            input,
+          });
+        }}
+      />
+      <DeleteChapterDialog
+        chapter={selectedChapter}
+        open={isDeleteChapterOpen}
+        isDeleting={deleteChapterMutation.isPending}
+        error={deleteChapterError}
+        onOpenChange={setIsDeleteChapterOpen}
+        onConfirm={() => {
+          if (!selectedChapter) {
+            return;
+          }
+
+          deleteChapterMutation.mutate(selectedChapter.id);
         }}
       />
     </div>

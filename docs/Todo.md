@@ -101,14 +101,14 @@
 - [x] 新增 notebook create dialog。
 - [x] 新增 notebook rename 與 description edit。
 - [x] 新增 notebook delete confirmation。
-- [ ] 新增 chapter create action。
-- [ ] 新增 chapter rename action。
-- [ ] 新增 chapter collapse toggle。
-- [ ] 新增 chapter delete confirmation。
+- [x] 新增 chapter create action。
+- [x] 新增 chapter rename action。
+- [x] 新增 chapter collapse toggle。
+- [x] 新增 chapter delete confirmation。
 - [ ] 新增 lesson create action。
 - [ ] 新增 lesson rename action。
 - [ ] 新增 lesson delete confirmation。
-- [ ] 將後端 `400` validation message 顯示在對應 form 附近。
+- [x] 將後端 `400` validation message 顯示在對應 form 附近。
 - [x] mutation 成功後 invalidate 或更新 React Query cache。
 
 ## Phase 6：排序
