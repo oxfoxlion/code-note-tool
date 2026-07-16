@@ -124,12 +124,12 @@
 
 ## Phase 7：Markdown Article Panel
 
-- [ ] 加入 CodeMirror Markdown editor。
-- [ ] 加入 edit 與 preview modes。
-- [ ] 使用 `lesson.htmlContent` 顯示初始 preview。
-- [ ] 使用 `codeNotebookApi.renderMarkdown()` 刷新 preview。
+- [x] 加入 CodeMirror Markdown editor。
+- [x] 加入 edit 與 preview modes。
+- [x] 使用 `lesson.htmlContent` 顯示初始 preview。
+- [x] 使用 `codeNotebookApi.renderMarkdown()` 刷新 preview。
 - [ ] 必要時將 preview refresh debounce 與 save debounce 分開。
-- [ ] preview render 失敗時保留 editor 內容。
+- [x] preview render 失敗時保留 editor 內容。
 
 ## Phase 8：JavaScript Code Panel
 

@@ -65,6 +65,7 @@ import {
 import { useNotebookWorkspace } from "@/hooks/use-notebook-workspace";
 import { ApiError, codeNotebookApi } from "@/lib/code-notebook/api-client";
 import { codeNotebookQueryKeys } from "@/lib/code-notebook/query-keys";
+import { MarkdownArticlePanel } from "@/components/notebook-workspace/markdown-article-panel";
 import type {
   Chapter,
   CreateLessonInput,
@@ -1176,55 +1177,6 @@ function PanelHeader({
   );
 }
 
-function ArticlePanel({
-  lesson,
-  isLoading,
-  error,
-  onRetry,
-}: {
-  lesson: Lesson | null;
-  isLoading: boolean;
-  error: unknown;
-  onRetry: () => void;
-}) {
-  return (
-    <section className="flex h-full min-h-0 flex-col">
-      <PanelHeader icon={FileText} title="Article" description="Markdown 預覽骨架" />
-      <div className="min-h-0 flex-1">
-        {isLoading ? (
-          <LoadingPanel label="正在載入 lesson" />
-        ) : error ? (
-          <ErrorPanel
-            message={getErrorMessage(error, "Lesson 載入失敗")}
-            onRetry={onRetry}
-          />
-        ) : lesson ? (
-          <ScrollArea className="h-full">
-            <article className="space-y-4 p-4">
-              <div>
-                <h1 className="text-xl font-semibold tracking-normal">{lesson.title}</h1>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Markdown editor 會在後續階段接上，這裡先顯示目前內容。
-                </p>
-              </div>
-              <Separator />
-              <pre className="whitespace-pre-wrap rounded-md border bg-muted p-3 text-sm leading-6">
-                {lesson.markdownContent || "這個 lesson 還沒有 Markdown 內容。"}
-              </pre>
-            </article>
-          </ScrollArea>
-        ) : (
-          <EmptyState
-            icon={FileText}
-            title="尚未選擇 lesson"
-            description="從左側章節樹選擇 lesson 後會顯示文章內容。"
-          />
-        )}
-      </div>
-    </section>
-  );
-}
-
 function CodePanel({ lesson }: { lesson: Lesson | null }) {
   return (
     <section className="flex h-full min-h-0 flex-col">
@@ -1329,7 +1281,7 @@ function DesktopWorkspace(state: WorkspaceLayoutState) {
       )}
       <ResizablePanelGroup orientation="horizontal" className="min-w-0 flex-1 overflow-hidden">
         <ResizablePanel defaultSize={52} minSize={32}>
-          <ArticlePanel
+          <MarkdownArticlePanel
             lesson={state.lesson}
             isLoading={state.lessonQuery.isLoading}
             error={state.lessonQuery.error}
@@ -1392,7 +1344,7 @@ function MobileWorkspace(state: WorkspaceViewState) {
         />
       </TabsContent>
       <TabsContent value="article" className="min-h-0">
-        <ArticlePanel
+        <MarkdownArticlePanel
           lesson={state.lesson}
           isLoading={state.lessonQuery.isLoading}
           error={state.lessonQuery.error}
