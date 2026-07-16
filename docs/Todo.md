@@ -74,26 +74,26 @@
 
 ## Phase 3：Workspace Shell
 
-- [ ] 將預設 `app/page.tsx` 換成 workspace entry。
-- [ ] 建立 `components/notebook-workspace/workspace-shell.tsx`。
-- [ ] 建立桌面四欄可調整 layout：
+- [x] 將預設 `app/page.tsx` 換成 workspace entry。
+- [x] 建立 `components/notebook-workspace/workspace-shell.tsx`。
+- [x] 建立桌面四欄可調整 layout：
   - notebook tree
   - article panel
   - code panel
   - output panel
-- [ ] 建立窄螢幕 tab layout。
-- [ ] 加入 loading 與 empty states。
-- [ ] 確保所有 icon 都來自 `lucide-react`。
-- [ ] 確認沒有新增手寫 SVG。
+- [x] 建立窄螢幕 tab layout。
+- [x] 加入 loading 與 empty states。
+- [x] 確保所有 icon 都來自 `lucide-react`。
+- [x] 確認沒有新增手寫 SVG。
 
 ## Phase 4：Notebook Tree 讀取流程
 
 - [x] 在 `lib/code-notebook/query-keys.ts` 建立 query keys。
-- [ ] 使用 `codeNotebookApi.listNotebooks()` 載入 notebook list。
-- [ ] 沒有選取 notebook 時預設選第一個 notebook。
-- [ ] 使用 `getNotebookTree()` 載入選取的 notebook tree。
-- [ ] 預設選取第一個可用 lesson。
-- [ ] 使用 `getLesson()` 載入選取 lesson。
+- [x] 使用 `codeNotebookApi.listNotebooks()` 載入 notebook list。
+- [x] 沒有選取 notebook 時預設選第一個 notebook。
+- [x] 使用 `getNotebookTree()` 載入選取的 notebook tree。
+- [x] 預設選取第一個可用 lesson。
+- [x] 使用 `getLesson()` 載入選取 lesson。
 - [ ] 遇到 `404` 時刷新 tree 並清除無效選取。
 
 ## Phase 5：Notebook、Chapter、Lesson CRUD
@@ -197,6 +197,7 @@
 - [ ] 新增 Playwright config。
 - [x] 測試 auth API client 使用 credentialed login request。
 - [ ] 測試 auth `401` redirect。
+- [x] 測試 workspace 預設選取第一個可用 lesson 的 helper。
 - [ ] 測試 debounced save behavior。
 - [ ] 測試 failed save 會保留 local draft。
 - [ ] 測試 lesson switch flush behavior。

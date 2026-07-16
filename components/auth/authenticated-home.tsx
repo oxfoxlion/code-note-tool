@@ -3,16 +3,13 @@
 import { BookOpen, Loader2, LogOut } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { WorkspaceShell } from "@/components/notebook-workspace/workspace-shell";
 import {
   isUnauthorizedError,
   useAuthSession,
   useLogout,
 } from "@/hooks/use-auth-session";
 import { ApiConnectionError } from "@/lib/code-notebook/api-client";
-
-function getDisplayName(user: NonNullable<ReturnType<typeof useAuthSession>["user"]>) {
-  return user.displayName ?? user.nickname ?? user.email ?? "使用者";
-}
 
 export function AuthenticatedHome() {
   const { error, isLoading, user } = useAuthSession();
@@ -67,18 +64,7 @@ export function AuthenticatedHome() {
           登出
         </Button>
       </header>
-      <section className="flex flex-1 items-center justify-center px-6">
-        <div className="w-full max-w-xl space-y-3 text-center">
-          <p className="text-sm text-muted-foreground">已登入</p>
-          <h1 className="text-2xl font-semibold tracking-normal">
-            {getDisplayName(user)}，Workspace 即將建立
-          </h1>
-          <p className="text-sm leading-6 text-muted-foreground">
-            Auth provider 與 session gate 已就緒。下一階段會接上 notebook tree、
-            Markdown editor、JavaScript editor 和 output panel。
-          </p>
-        </div>
-      </section>
+      <WorkspaceShell />
     </main>
   );
 }
