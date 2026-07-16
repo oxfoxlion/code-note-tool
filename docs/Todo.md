@@ -94,13 +94,13 @@
 - [x] 使用 `getNotebookTree()` 載入選取的 notebook tree。
 - [x] 預設選取第一個可用 lesson。
 - [x] 使用 `getLesson()` 載入選取 lesson。
-- [ ] 遇到 `404` 時刷新 tree 並清除無效選取。
+- [x] 遇到 `404` 時刷新 tree 並清除無效選取。
 
 ## Phase 5：Notebook、Chapter、Lesson CRUD
 
-- [ ] 新增 notebook create dialog。
-- [ ] 新增 notebook rename 與 description edit。
-- [ ] 新增 notebook delete confirmation。
+- [x] 新增 notebook create dialog。
+- [x] 新增 notebook rename 與 description edit。
+- [x] 新增 notebook delete confirmation。
 - [ ] 新增 chapter create action。
 - [ ] 新增 chapter rename action。
 - [ ] 新增 chapter collapse toggle。
@@ -109,7 +109,7 @@
 - [ ] 新增 lesson rename action。
 - [ ] 新增 lesson delete confirmation。
 - [ ] 將後端 `400` validation message 顯示在對應 form 附近。
-- [ ] mutation 成功後 invalidate 或更新 React Query cache。
+- [x] mutation 成功後 invalidate 或更新 React Query cache。
 
 ## Phase 6：排序
 

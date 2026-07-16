@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  AlertTriangle,
   BookOpen,
   Braces,
   ChevronDown,
@@ -10,13 +11,38 @@ import {
   Loader2,
   NotebookTabs,
   PanelBottom,
+  Pencil,
   Plus,
   RefreshCw,
   Terminal,
+  Trash2,
 } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { toast } from "sonner";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogMedia,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -25,6 +51,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
   TooltipContent,
@@ -32,8 +59,18 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useNotebookWorkspace } from "@/hooks/use-notebook-workspace";
-import { ApiError } from "@/lib/code-notebook/api-client";
-import type { Chapter, Lesson, LessonSummary, Notebook, NotebookTree, UUID } from "@/lib/code-notebook/types";
+import { ApiError, codeNotebookApi } from "@/lib/code-notebook/api-client";
+import { codeNotebookQueryKeys } from "@/lib/code-notebook/query-keys";
+import type {
+  Chapter,
+  CreateNotebookInput,
+  Lesson,
+  LessonSummary,
+  Notebook,
+  NotebookTree,
+  UpdateNotebookInput,
+  UUID,
+} from "@/lib/code-notebook/types";
 import { cn } from "@/lib/utils";
 
 type WorkspaceState = ReturnType<typeof useNotebookWorkspace>;
@@ -50,17 +87,25 @@ function WorkspaceToolbar({
   notebooks,
   selectedNotebookId,
   onSelectNotebook,
+  onCreateNotebook,
+  onEditNotebook,
+  onDeleteNotebook,
   onRefresh,
   isRefreshing,
 }: {
   notebooks: Notebook[];
   selectedNotebookId: UUID | null;
   onSelectNotebook: (notebookId: UUID) => void;
+  onCreateNotebook: () => void;
+  onEditNotebook: () => void;
+  onDeleteNotebook: () => void;
   onRefresh: () => void;
   isRefreshing: boolean;
 }) {
+  const hasSelectedNotebook = selectedNotebookId !== null;
+
   return (
-    <div className="flex h-12 items-center justify-between border-b bg-background px-3">
+    <div className="flex min-h-12 items-center justify-between gap-2 border-b bg-background px-3 py-2">
       <div className="flex min-w-0 items-center gap-2">
         <NotebookTabs className="size-4 shrink-0 text-muted-foreground" />
         <select
@@ -83,6 +128,58 @@ function WorkspaceToolbar({
         <ChevronDown className="hidden size-4 text-muted-foreground sm:block" />
       </div>
       <TooltipProvider>
+        <div className="flex shrink-0 items-center gap-1">
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={onCreateNotebook}
+                  aria-label="新增筆記本"
+                >
+                  <Plus className="size-4" />
+                </Button>
+              }
+            />
+            <TooltipContent>新增筆記本</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={onEditNotebook}
+                  disabled={!hasSelectedNotebook}
+                  aria-label="編輯筆記本"
+                >
+                  <Pencil className="size-4" />
+                </Button>
+              }
+            />
+            <TooltipContent>編輯筆記本</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={onDeleteNotebook}
+                  disabled={!hasSelectedNotebook}
+                  aria-label="刪除筆記本"
+                >
+                  <Trash2 className="size-4" />
+                </Button>
+              }
+            />
+            <TooltipContent>刪除筆記本</TooltipContent>
+          </Tooltip>
+          <Separator orientation="vertical" className="mx-1 h-5" />
         <Tooltip>
           <TooltipTrigger
             render={
@@ -104,8 +201,197 @@ function WorkspaceToolbar({
           />
           <TooltipContent>重新整理工作區</TooltipContent>
         </Tooltip>
+        </div>
       </TooltipProvider>
     </div>
+  );
+}
+
+function NotebookDialog({
+  mode,
+  notebook,
+  open,
+  isSubmitting,
+  error,
+  onOpenChange,
+  onSubmit,
+}: {
+  mode: "create" | "edit";
+  notebook: Notebook | null;
+  open: boolean;
+  isSubmitting: boolean;
+  error: string | null;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (input: CreateNotebookInput | UpdateNotebookInput) => void;
+}) {
+  const dialogTitle = mode === "create" ? "新增筆記本" : "編輯筆記本";
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      {open ? (
+        <NotebookDialogForm
+          key={`${mode}-${notebook?.id ?? "new"}`}
+          dialogTitle={dialogTitle}
+          mode={mode}
+          notebook={notebook}
+          isSubmitting={isSubmitting}
+          error={error}
+          onOpenChange={onOpenChange}
+          onSubmit={onSubmit}
+        />
+      ) : null}
+    </Dialog>
+  );
+}
+
+function NotebookDialogForm({
+  dialogTitle,
+  mode,
+  notebook,
+  isSubmitting,
+  error,
+  onOpenChange,
+  onSubmit,
+}: {
+  dialogTitle: string;
+  mode: "create" | "edit";
+  notebook: Notebook | null;
+  isSubmitting: boolean;
+  error: string | null;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (input: CreateNotebookInput | UpdateNotebookInput) => void;
+}) {
+  const [title, setTitle] = useState(() =>
+    mode === "edit" && notebook ? notebook.title : "",
+  );
+  const [description, setDescription] = useState(() =>
+    mode === "edit" && notebook ? notebook.description ?? "" : "",
+  );
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  return (
+    <DialogContent>
+      <DialogHeader>
+        <DialogTitle>{dialogTitle}</DialogTitle>
+        <DialogDescription>
+          筆記本用來整理章節與 lesson，描述可留空。
+        </DialogDescription>
+      </DialogHeader>
+      <form
+        className="space-y-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const normalizedTitle = title.trim();
+
+          if (!normalizedTitle) {
+            setLocalError("請輸入筆記本名稱。");
+            return;
+          }
+
+          setLocalError(null);
+          onSubmit({
+            title: normalizedTitle,
+            description: description.trim() || null,
+          });
+        }}
+      >
+        <div className="space-y-2">
+          <label className="text-sm font-medium" htmlFor="notebook-title">
+            名稱
+          </label>
+          <Input
+            id="notebook-title"
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="例如：JavaScript 基礎"
+            aria-invalid={Boolean(localError || error)}
+            disabled={isSubmitting}
+          />
+        </div>
+        <div className="space-y-2">
+          <label className="text-sm font-medium" htmlFor="notebook-description">
+            描述
+          </label>
+          <Textarea
+            id="notebook-description"
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            placeholder="可選填"
+            disabled={isSubmitting}
+          />
+        </div>
+        {localError || error ? (
+          <p className="text-sm text-destructive" role="alert">
+            {localError ?? error}
+          </p>
+        ) : null}
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={isSubmitting}
+          >
+            取消
+          </Button>
+          <Button type="submit" disabled={isSubmitting}>
+            {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : null}
+            {mode === "create" ? "建立" : "儲存"}
+          </Button>
+        </DialogFooter>
+      </form>
+    </DialogContent>
+  );
+}
+
+function DeleteNotebookDialog({
+  notebook,
+  open,
+  isDeleting,
+  error,
+  onOpenChange,
+  onConfirm,
+}: {
+  notebook: Notebook | null;
+  open: boolean;
+  isDeleting: boolean;
+  error: string | null;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogMedia>
+            <AlertTriangle className="size-5 text-destructive" />
+          </AlertDialogMedia>
+          <AlertDialogTitle>刪除筆記本</AlertDialogTitle>
+          <AlertDialogDescription>
+            {notebook
+              ? `確定要刪除「${notebook.title}」嗎？這會一併移除其中的章節與 lesson。`
+              : "確定要刪除這本筆記本嗎？"}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        {error ? (
+          <p className="text-sm text-destructive" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={isDeleting}>取消</AlertDialogCancel>
+          <AlertDialogAction
+            type="button"
+            variant="destructive"
+            disabled={isDeleting}
+            onClick={onConfirm}
+          >
+            {isDeleting ? <Loader2 className="size-4 animate-spin" /> : null}
+            刪除
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 
@@ -500,9 +786,66 @@ function MobileWorkspace(state: WorkspaceState) {
 
 export function WorkspaceShell() {
   const state = useNotebookWorkspace();
+  const queryClient = useQueryClient();
+  const [notebookDialogMode, setNotebookDialogMode] = useState<"create" | "edit">("create");
+  const [isNotebookDialogOpen, setIsNotebookDialogOpen] = useState(false);
+  const [isDeleteNotebookOpen, setIsDeleteNotebookOpen] = useState(false);
+  const selectedNotebook =
+    state.notebooks.find((notebook) => notebook.id === state.selectedNotebookId) ?? null;
   const isInitialLoading = state.notebooksQuery.isLoading;
   const isRefreshing =
     state.notebooksQuery.isFetching || state.treeQuery.isFetching || state.lessonQuery.isFetching;
+  const createNotebookMutation = useMutation({
+    mutationFn: codeNotebookApi.createNotebook,
+    onSuccess: (data) => {
+      state.setSelectedNotebookId(data.notebook.id);
+      state.setSelectedLessonId(null);
+      setIsNotebookDialogOpen(false);
+      toast.success("筆記本已建立");
+      void queryClient.invalidateQueries({
+        queryKey: codeNotebookQueryKeys.notebooks.all,
+      });
+    },
+  });
+  const updateNotebookMutation = useMutation({
+    mutationFn: ({
+      notebookId,
+      input,
+    }: {
+      notebookId: UUID;
+      input: UpdateNotebookInput;
+    }) => codeNotebookApi.updateNotebook(notebookId, input),
+    onSuccess: (data) => {
+      setIsNotebookDialogOpen(false);
+      toast.success("筆記本已更新");
+      void queryClient.invalidateQueries({
+        queryKey: codeNotebookQueryKeys.notebooks.all,
+      });
+      void queryClient.invalidateQueries({
+        queryKey: codeNotebookQueryKeys.notebooks.tree(data.notebook.id),
+      });
+    },
+  });
+  const deleteNotebookMutation = useMutation({
+    mutationFn: codeNotebookApi.deleteNotebook,
+    onSuccess: () => {
+      state.setSelectedNotebookId(null);
+      state.setSelectedLessonId(null);
+      setIsDeleteNotebookOpen(false);
+      toast.success("筆記本已刪除");
+      void queryClient.invalidateQueries({
+        queryKey: codeNotebookQueryKeys.notebooks.all,
+      });
+    },
+  });
+
+  const notebookDialogError =
+    getErrorMessage(createNotebookMutation.error, "") ||
+    getErrorMessage(updateNotebookMutation.error, "") ||
+    null;
+  const deleteNotebookError = getErrorMessage(deleteNotebookMutation.error, "") || null;
+  const isSubmittingNotebook =
+    createNotebookMutation.isPending || updateNotebookMutation.isPending;
 
   if (isInitialLoading) {
     return <LoadingPanel label="正在載入工作區" />;
@@ -524,13 +867,60 @@ export function WorkspaceShell() {
           notebooks={state.notebooks}
           selectedNotebookId={state.selectedNotebookId}
           onSelectNotebook={state.setSelectedNotebookId}
+          onCreateNotebook={() => {
+            createNotebookMutation.reset();
+            updateNotebookMutation.reset();
+            setNotebookDialogMode("create");
+            setIsNotebookDialogOpen(true);
+          }}
+          onEditNotebook={() => {
+            if (!selectedNotebook) {
+              return;
+            }
+
+            createNotebookMutation.reset();
+            updateNotebookMutation.reset();
+            setNotebookDialogMode("edit");
+            setIsNotebookDialogOpen(true);
+          }}
+          onDeleteNotebook={() => {
+            if (!selectedNotebook) {
+              return;
+            }
+
+            deleteNotebookMutation.reset();
+            setIsDeleteNotebookOpen(true);
+          }}
           onRefresh={() => state.notebooksQuery.refetch()}
           isRefreshing={isRefreshing}
         />
         <EmptyState
           icon={Plus}
           title="還沒有筆記本"
-          description="資料串接已就緒。下一階段會加入建立筆記本的操作。"
+          description="建立第一本筆記本後，就能開始整理章節與 lesson。"
+        />
+        <NotebookDialog
+          mode={notebookDialogMode}
+          notebook={selectedNotebook}
+          open={isNotebookDialogOpen}
+          isSubmitting={isSubmittingNotebook}
+          error={notebookDialogError}
+          onOpenChange={setIsNotebookDialogOpen}
+          onSubmit={(input) => {
+            if (notebookDialogMode === "create") {
+              createNotebookMutation.mutate(input as CreateNotebookInput);
+              return;
+            }
+
+            if (!selectedNotebook) {
+              return;
+            }
+
+            updateNotebookMutation.mutate({
+              notebookId: selectedNotebook.id,
+              input,
+            });
+          }}
         />
       </div>
     );
@@ -544,6 +934,30 @@ export function WorkspaceShell() {
         onSelectNotebook={(notebookId) => {
           state.setSelectedNotebookId(notebookId);
           state.setSelectedLessonId(null);
+        }}
+        onCreateNotebook={() => {
+          createNotebookMutation.reset();
+          updateNotebookMutation.reset();
+          setNotebookDialogMode("create");
+          setIsNotebookDialogOpen(true);
+        }}
+        onEditNotebook={() => {
+          if (!selectedNotebook) {
+            return;
+          }
+
+          createNotebookMutation.reset();
+          updateNotebookMutation.reset();
+          setNotebookDialogMode("edit");
+          setIsNotebookDialogOpen(true);
+        }}
+        onDeleteNotebook={() => {
+          if (!selectedNotebook) {
+            return;
+          }
+
+          deleteNotebookMutation.reset();
+          setIsDeleteNotebookOpen(true);
         }}
         onRefresh={() => {
           state.notebooksQuery.refetch();
@@ -566,6 +980,43 @@ export function WorkspaceShell() {
       </div>
       <DesktopWorkspace {...state} />
       <MobileWorkspace {...state} />
+      <NotebookDialog
+        mode={notebookDialogMode}
+        notebook={selectedNotebook}
+        open={isNotebookDialogOpen}
+        isSubmitting={isSubmittingNotebook}
+        error={notebookDialogError}
+        onOpenChange={setIsNotebookDialogOpen}
+        onSubmit={(input) => {
+          if (notebookDialogMode === "create") {
+            createNotebookMutation.mutate(input as CreateNotebookInput);
+            return;
+          }
+
+          if (!selectedNotebook) {
+            return;
+          }
+
+          updateNotebookMutation.mutate({
+            notebookId: selectedNotebook.id,
+            input,
+          });
+        }}
+      />
+      <DeleteNotebookDialog
+        notebook={selectedNotebook}
+        open={isDeleteNotebookOpen}
+        isDeleting={deleteNotebookMutation.isPending}
+        error={deleteNotebookError}
+        onOpenChange={setIsDeleteNotebookOpen}
+        onConfirm={() => {
+          if (!selectedNotebook) {
+            return;
+          }
+
+          deleteNotebookMutation.mutate(selectedNotebook.id);
+        }}
+      />
     </div>
   );
 }

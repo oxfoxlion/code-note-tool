@@ -58,4 +58,46 @@ describe("findFirstLesson", () => {
   it("returns null when there are no lessons", () => {
     expect(findFirstLesson(baseTree)).toBeNull();
   });
+
+  it("skips an excluded lesson when selecting the first available lesson", () => {
+    const skippedLesson = {
+      id: "lesson-1",
+      notebookId: "notebook-1",
+      chapterId: "chapter-1",
+      title: "Skipped lesson",
+      orderIndex: 0,
+      codeLanguage: "javascript",
+      runtime: "browser",
+      autoRun: false,
+      maxRuntimeMs: 10000,
+    };
+    const nextLesson = {
+      id: "lesson-2",
+      notebookId: "notebook-1",
+      chapterId: "chapter-1",
+      title: "Next lesson",
+      orderIndex: 1,
+      codeLanguage: "javascript",
+      runtime: "browser",
+      autoRun: false,
+      maxRuntimeMs: 10000,
+    };
+
+    const tree: NotebookTree = {
+      ...baseTree,
+      chapters: [
+        {
+          id: "chapter-1",
+          notebookId: "notebook-1",
+          parentId: null,
+          title: "Has lessons",
+          orderIndex: 0,
+          isCollapsed: false,
+          lessons: [skippedLesson, nextLesson],
+        },
+      ],
+    };
+
+    expect(findFirstLesson(tree, "lesson-1")).toEqual(nextLesson);
+  });
 });
