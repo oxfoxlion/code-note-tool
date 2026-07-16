@@ -114,12 +114,12 @@
 
 ## Phase 6：排序
 
-- [ ] 使用 `@dnd-kit` 建立 sortable chapter list。
-- [ ] 使用 `reorderChapters()` 持久化 chapter order。
-- [ ] 使用 `@dnd-kit` 建立 sortable lesson list。
-- [ ] 使用 `reorderLessons()` 持久化 lesson order。
-- [ ] reorder 使用 optimistic UI。
-- [ ] reorder 失敗時 rollback 視覺順序。
+- [x] 使用 `@dnd-kit` 建立 sortable chapter list。
+- [x] 使用 `reorderChapters()` 持久化 chapter order。
+- [x] 使用 `@dnd-kit` 建立 sortable lesson list。
+- [x] 使用 `reorderLessons()` 持久化 lesson order。
+- [x] reorder 使用 optimistic UI。
+- [x] reorder 失敗時 rollback 視覺順序。
 - [ ] 後續 accessibility pass 要補上 keyboard 操作。
 
 ## Phase 7：Markdown Article Panel
@@ -204,6 +204,7 @@
 - [x] 測試 failed save 會保留 local draft。
 - [ ] 測試 lesson switch flush behavior。
 - [x] 測試 runner stop 與 timeout behavior。
+- [x] 測試 reorder helper behavior。
 - [ ] 測試 reorder rollback behavior。
 - [ ] 新增 E2E：unauthenticated redirect。
 - [ ] 新增 E2E：authenticated workspace load。

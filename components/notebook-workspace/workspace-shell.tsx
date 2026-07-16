@@ -2,6 +2,20 @@
 
 import dynamic from "next/dynamic";
 import {
+  closestCenter,
+  DndContext,
+  type DragEndEvent,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
   AlertTriangle,
   BookOpen,
   Braces,
@@ -12,6 +26,7 @@ import {
   Eraser,
   FileText,
   Folder,
+  GripVertical,
   Loader2,
   NotebookTabs,
   PanelBottom,
@@ -80,6 +95,11 @@ import type { DisposableRunner, RunnerEvent, RunnerStatus } from "@/lib/code-run
 import { codeNotebookApi } from "@/lib/code-notebook/api-client";
 import { getApiErrorMessage, getRetryableErrorMessage } from "@/lib/code-notebook/errors";
 import { codeNotebookQueryKeys } from "@/lib/code-notebook/query-keys";
+import {
+  reorderChaptersInTree,
+  reorderLessonsInTree,
+  toReorderItems,
+} from "@/lib/code-notebook/reorder";
 import type {
   Chapter,
   CreateLessonInput,
@@ -117,6 +137,8 @@ type WorkspaceTreeActions = {
   onCreateLesson: (chapter: Chapter) => void;
   onRenameLesson: (lesson: LessonSummary) => void;
   onDeleteLesson: (lesson: LessonSummary) => void;
+  onReorderChapters: (activeId: UUID, overId: UUID) => void;
+  onReorderLessons: (chapterId: UUID, activeId: UUID, overId: UUID) => void;
 };
 type MarkdownSaveControllerHandler = (
   controller: MarkdownArticleSaveController,
@@ -899,6 +921,8 @@ function TreePanel({
   onCreateLesson,
   onRenameLesson,
   onDeleteLesson,
+  onReorderChapters,
+  onReorderLessons,
   onRetry,
 }: {
   tree: NotebookTree | null;
@@ -913,8 +937,28 @@ function TreePanel({
   onCreateLesson: (chapter: Chapter) => void;
   onRenameLesson: (lesson: LessonSummary) => void;
   onDeleteLesson: (lesson: LessonSummary) => void;
+  onReorderChapters: (activeId: UUID, overId: UUID) => void;
+  onReorderLessons: (chapterId: UUID, activeId: UUID, overId: UUID) => void;
   onRetry: () => void;
 }) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 6,
+      },
+    }),
+  );
+
+  const handleChapterDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (!over || active.id === over.id) {
+      return;
+    }
+
+    onReorderChapters(String(active.id), String(over.id));
+  };
+
   if (isLoading) {
     return <LoadingPanel label="正在載入章節" />;
   }
@@ -978,30 +1022,44 @@ function TreePanel({
         </TooltipProvider>
       </div>
       <ScrollArea className="min-h-0 flex-1">
-        <div className="space-y-3 p-3">
-          {tree.chapters.map((chapter) => (
-            <ChapterNode
-              key={chapter.id}
-              chapter={chapter}
-              selectedLessonId={selectedLessonId}
-              onSelectLesson={onSelectLesson}
-              onRenameChapter={onRenameChapter}
-              onToggleChapter={onToggleChapter}
-              onDeleteChapter={onDeleteChapter}
-              onCreateLesson={onCreateLesson}
-              onRenameLesson={onRenameLesson}
-              onDeleteLesson={onDeleteLesson}
-            />
-          ))}
-        </div>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleChapterDragEnd}
+        >
+          <SortableContext
+            items={tree.chapters.map((chapter) => chapter.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            <div className="space-y-3 p-3">
+              {tree.chapters.map((chapter) => (
+                <SortableChapterNode
+                  key={chapter.id}
+                  chapter={chapter}
+                  selectedLessonId={selectedLessonId}
+                  sensors={sensors}
+                  onSelectLesson={onSelectLesson}
+                  onRenameChapter={onRenameChapter}
+                  onToggleChapter={onToggleChapter}
+                  onDeleteChapter={onDeleteChapter}
+                  onCreateLesson={onCreateLesson}
+                  onRenameLesson={onRenameLesson}
+                  onDeleteLesson={onDeleteLesson}
+                  onReorderLessons={onReorderLessons}
+                />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
       </ScrollArea>
     </div>
   );
 }
 
-function ChapterNode({
+function SortableChapterNode({
   chapter,
   selectedLessonId,
+  sensors,
   onSelectLesson,
   onRenameChapter,
   onToggleChapter,
@@ -1009,9 +1067,11 @@ function ChapterNode({
   onCreateLesson,
   onRenameLesson,
   onDeleteLesson,
+  onReorderLessons,
 }: {
   chapter: Chapter;
   selectedLessonId: UUID | null;
+  sensors: ReturnType<typeof useSensors>;
   onSelectLesson: (lessonId: UUID) => void;
   onRenameChapter: (chapter: Chapter) => void;
   onToggleChapter: (chapter: Chapter) => void;
@@ -1019,12 +1079,58 @@ function ChapterNode({
   onCreateLesson: (chapter: Chapter) => void;
   onRenameLesson: (lesson: LessonSummary) => void;
   onDeleteLesson: (lesson: LessonSummary) => void;
+  onReorderLessons: (chapterId: UUID, activeId: UUID, overId: UUID) => void;
 }) {
   const lessons = chapter.lessons ?? [];
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: chapter.id,
+  });
+  const sortableStyle = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+  const handleLessonDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (!over || active.id === over.id) {
+      return;
+    }
+
+    onReorderLessons(chapter.id, String(active.id), String(over.id));
+  };
 
   return (
-    <section className="space-y-1">
+    <section
+      ref={setNodeRef}
+      style={sortableStyle}
+      className={cn("space-y-1", isDragging && "opacity-70")}
+    >
       <div className="group flex min-h-8 items-center gap-1 rounded-md px-1 text-sm font-medium hover:bg-muted/60">
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  className="flex size-6 shrink-0 cursor-grab items-center justify-center rounded-md text-muted-foreground hover:bg-muted active:cursor-grabbing"
+                  aria-label="拖曳排序章節"
+                  {...attributes}
+                  {...listeners}
+                >
+                  <GripVertical className="size-3.5" />
+                </button>
+              }
+            />
+            <TooltipContent>拖曳排序章節</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger
@@ -1106,12 +1212,21 @@ function ChapterNode({
         </div>
       </div>
       {chapter.isCollapsed ? null : (
-        <div className="space-y-1 pl-6">
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleLessonDragEnd}
+        >
+          <SortableContext
+            items={lessons.map((lesson) => lesson.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            <div className="space-y-1 pl-8">
           {lessons.length === 0 ? (
             <p className="px-2 py-1 text-xs text-muted-foreground">尚無 lesson</p>
           ) : (
             lessons.map((lesson) => (
-              <LessonButton
+              <SortableLessonButton
                 key={lesson.id}
                 lesson={lesson}
                 isSelected={lesson.id === selectedLessonId}
@@ -1121,13 +1236,15 @@ function ChapterNode({
               />
             ))
           )}
-        </div>
+            </div>
+          </SortableContext>
+        </DndContext>
       )}
     </section>
   );
 }
 
-function LessonButton({
+function SortableLessonButton({
   lesson,
   isSelected,
   onSelectLesson,
@@ -1140,13 +1257,49 @@ function LessonButton({
   onRenameLesson: (lesson: LessonSummary) => void;
   onDeleteLesson: (lesson: LessonSummary) => void;
 }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: lesson.id,
+  });
+  const sortableStyle = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
   return (
     <div
+      ref={setNodeRef}
+      style={sortableStyle}
       className={cn(
         "group/lesson flex min-h-9 w-full items-center gap-1 rounded-md px-1 text-sm transition-colors hover:bg-accent",
         isSelected && "bg-accent text-accent-foreground",
+        isDragging && "opacity-70",
       )}
     >
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <button
+                type="button"
+                className="flex size-6 shrink-0 cursor-grab items-center justify-center rounded-md text-muted-foreground hover:bg-muted active:cursor-grabbing"
+                aria-label="拖曳排序 lesson"
+                {...attributes}
+                {...listeners}
+              >
+                <GripVertical className="size-3.5" />
+              </button>
+            }
+          />
+          <TooltipContent>拖曳排序 lesson</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
       <button
         type="button"
         onClick={() => onSelectLesson(lesson.id)}
@@ -1649,6 +1802,8 @@ function DesktopWorkspace(state: WorkspaceLayoutState) {
             onCreateLesson={state.onCreateLesson}
             onRenameLesson={state.onRenameLesson}
             onDeleteLesson={state.onDeleteLesson}
+            onReorderChapters={state.onReorderChapters}
+            onReorderLessons={state.onReorderLessons}
             onRetry={() => state.treeQuery.refetch()}
           />
         </aside>
@@ -1723,6 +1878,8 @@ function MobileWorkspace(state: WorkspaceViewState) {
           onCreateLesson={state.onCreateLesson}
           onRenameLesson={state.onRenameLesson}
           onDeleteLesson={state.onDeleteLesson}
+          onReorderChapters={state.onReorderChapters}
+          onReorderLessons={state.onReorderLessons}
           onRetry={() => state.treeQuery.refetch()}
         />
       </TabsContent>
@@ -2016,6 +2173,83 @@ export function WorkspaceShell() {
       invalidateSelectedTree();
     },
   });
+  const reorderChaptersMutation = useMutation({
+    mutationFn: ({
+      notebookId,
+      chapters,
+    }: {
+      notebookId: UUID;
+      chapters: ReturnType<typeof toReorderItems>;
+      optimisticTree: NotebookTree;
+    }) => codeNotebookApi.reorderChapters(notebookId, chapters),
+    onMutate: async ({ notebookId, optimisticTree }) => {
+      const queryKey = codeNotebookQueryKeys.notebooks.tree(notebookId);
+      await queryClient.cancelQueries({ queryKey });
+      const previousTree = queryClient.getQueryData<NotebookTree>(queryKey);
+
+      queryClient.setQueryData(queryKey, optimisticTree);
+
+      return {
+        notebookId,
+        previousTree,
+      };
+    },
+    onSuccess: (tree, variables) => {
+      queryClient.setQueryData(
+        codeNotebookQueryKeys.notebooks.tree(variables.notebookId),
+        tree,
+      );
+    },
+    onError: (error, variables, context) => {
+      if (context?.previousTree) {
+        queryClient.setQueryData(
+          codeNotebookQueryKeys.notebooks.tree(variables.notebookId),
+          context.previousTree,
+        );
+      }
+
+      toast.error(getApiErrorMessage(error, "章節排序更新失敗"));
+    },
+  });
+  const reorderLessonsMutation = useMutation({
+    mutationFn: ({
+      chapterId,
+      lessons,
+    }: {
+      notebookId: UUID;
+      chapterId: UUID;
+      lessons: ReturnType<typeof toReorderItems>;
+      optimisticTree: NotebookTree;
+    }) => codeNotebookApi.reorderLessons(chapterId, lessons),
+    onMutate: async ({ notebookId, optimisticTree }) => {
+      const queryKey = codeNotebookQueryKeys.notebooks.tree(notebookId);
+      await queryClient.cancelQueries({ queryKey });
+      const previousTree = queryClient.getQueryData<NotebookTree>(queryKey);
+
+      queryClient.setQueryData(queryKey, optimisticTree);
+
+      return {
+        notebookId,
+        previousTree,
+      };
+    },
+    onSuccess: (tree, variables) => {
+      queryClient.setQueryData(
+        codeNotebookQueryKeys.notebooks.tree(variables.notebookId),
+        tree,
+      );
+    },
+    onError: (error, variables, context) => {
+      if (context?.previousTree) {
+        queryClient.setQueryData(
+          codeNotebookQueryKeys.notebooks.tree(variables.notebookId),
+          context.previousTree,
+        );
+      }
+
+      toast.error(getApiErrorMessage(error, "Lesson 排序更新失敗"));
+    },
+  });
 
   const notebookDialogError =
     getApiErrorMessage(createNotebookMutation.error, "") ||
@@ -2082,6 +2316,49 @@ export function WorkspaceShell() {
     setSelectedLessonSummary(lesson);
     setIsDeleteLessonOpen(true);
   };
+  const reorderChapters = (activeId: UUID, overId: UUID) => {
+    if (!state.selectedNotebookId || !state.tree) {
+      return;
+    }
+
+    const optimisticTree = reorderChaptersInTree(state.tree, activeId, overId);
+    if (optimisticTree === state.tree) {
+      return;
+    }
+
+    reorderChaptersMutation.mutate({
+      notebookId: state.selectedNotebookId,
+      chapters: toReorderItems(optimisticTree.chapters),
+      optimisticTree,
+    });
+  };
+  const reorderLessons = (chapterId: UUID, activeId: UUID, overId: UUID) => {
+    if (!state.selectedNotebookId || !state.tree) {
+      return;
+    }
+
+    const optimisticTree = reorderLessonsInTree(
+      state.tree,
+      chapterId,
+      activeId,
+      overId,
+    );
+    if (optimisticTree === state.tree) {
+      return;
+    }
+
+    const chapter = optimisticTree.chapters.find((item) => item.id === chapterId);
+    if (!chapter) {
+      return;
+    }
+
+    reorderLessonsMutation.mutate({
+      notebookId: state.selectedNotebookId,
+      chapterId,
+      lessons: toReorderItems(chapter.lessons ?? []),
+      optimisticTree,
+    });
+  };
   const viewState: WorkspaceViewState = {
     ...state,
     setSelectedLessonId: selectLessonWithSaveGuard,
@@ -2098,6 +2375,8 @@ export function WorkspaceShell() {
     onCreateLesson: openCreateLessonDialog,
     onRenameLesson: openRenameLessonDialog,
     onDeleteLesson: openDeleteLessonDialog,
+    onReorderChapters: reorderChapters,
+    onReorderLessons: reorderLessons,
     onMarkdownSaveControllerChange: handleMarkdownSaveControllerChange,
     onCodeSaveControllerChange: handleCodeSaveControllerChange,
     runnerOutputContent,
