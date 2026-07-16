@@ -42,17 +42,33 @@ export class ApiError extends Error {
   }
 }
 
+export class ApiConnectionError extends Error {
+  constructor(message = "無法連線到 API，請確認 NEXT_PUBLIC_API_BASE_URL 並重啟 dev server。") {
+    super(message);
+    this.name = "ApiConnectionError";
+  }
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   if (init.body != null && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    headers,
-    credentials: "include",
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...init,
+      headers,
+      credentials: "include",
+    });
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new ApiConnectionError();
+    }
+
+    throw error;
+  }
 
   const contentType = response.headers.get("content-type") ?? "";
   const body = contentType.includes("application/json")

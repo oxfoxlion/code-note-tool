@@ -41,8 +41,8 @@
 - [x] 將 `docs/frontend-handoff/types.ts` 複製到 `lib/code-notebook/types.ts`。
 - [x] 將 `docs/frontend-handoff/api-client.ts` 複製到 `lib/code-notebook/api-client.ts`。
 - [x] 確認複製 API client 前 handoff `types.ts` 已補齊 auth 型別。
-- [ ] 請使用者自行從 `docs/frontend-handoff/.env.example` 建立 `.env.local`，並設定 `NEXT_PUBLIC_API_BASE_URL`。
-- [ ] 若環境變數有變更，只能更新 `.env.example`，並告知使用者要同步到本機環境。
+- [x] 請使用者自行從 `docs/frontend-handoff/.env.example` 建立 `.env.local`，並設定 `NEXT_PUBLIC_API_BASE_URL`。
+- [x] 若環境變數有變更，只能更新 `.env.example`，並告知使用者要同步到本機環境。
 - [x] 更新 create-next-app 預設 metadata。
 - [x] 在依賴 `npm run build` 前，先移除或自託管預設 `next/font/google` 字體，因為目前環境無法在 build 時抓取 Google Fonts。
 - [x] 盡早新增 package scripts：
@@ -59,18 +59,18 @@
 
 ## Phase 2：App Providers 與 Auth
 
-- [ ] 新增 `app/providers.tsx`。
-- [ ] 設定 `QueryClientProvider`。
-- [ ] 設定全域 toast provider。
-- [ ] 使用 `authApi.me()` 建立 auth session query。
-- [ ] auth 回傳 `401` 時導向 `/login`。
-- [ ] 新增前端 `/login` 頁面。
-- [ ] 使用 `POST /auth/login` 串接 login form。
-- [ ] 支援 email/password 與 nickname/PIN 兩種登入方式。
-- [ ] login 回傳 `require2FA` 時顯示 2FA token 輸入流程，並呼叫 `POST /auth/2fa/verify`。
-- [ ] 視第一版需求決定是否在 `/login` 同頁提供 `POST /auth/register` 註冊入口。
-- [ ] 使用 `authApi.logout()` 新增登出動作。
-- [ ] 驗證 auth loading、authenticated、unauthenticated 三種 UI 狀態。
+- [x] 新增 `app/providers.tsx`。
+- [x] 設定 `QueryClientProvider`。
+- [x] 設定全域 toast provider。
+- [x] 使用 `authApi.me()` 建立 auth session query。
+- [x] auth 回傳 `401` 時導向 `/login`。
+- [x] 新增前端 `/login` 頁面。
+- [x] 使用 `POST /auth/login` 串接 login form。
+- [x] 支援 email/password 與 nickname/PIN 兩種登入方式。
+- [x] login 回傳 `require2FA` 時顯示 2FA token 輸入流程，並呼叫 `POST /auth/2fa/verify`。
+- [x] 視第一版需求決定是否在 `/login` 同頁提供 `POST /auth/register` 註冊入口：第一版先不放註冊入口，避免登入頁流程過重。
+- [x] 使用 `authApi.logout()` 新增登出動作。
+- [x] 驗證 auth loading、authenticated、unauthenticated 三種 UI 狀態。
 
 ## Phase 3：Workspace Shell
 
@@ -88,7 +88,7 @@
 
 ## Phase 4：Notebook Tree 讀取流程
 
-- [ ] 在 `lib/code-notebook/query-keys.ts` 建立 query keys。
+- [x] 在 `lib/code-notebook/query-keys.ts` 建立 query keys。
 - [ ] 使用 `codeNotebookApi.listNotebooks()` 載入 notebook list。
 - [ ] 沒有選取 notebook 時預設選第一個 notebook。
 - [ ] 使用 `getNotebookTree()` 載入選取的 notebook tree。
@@ -195,6 +195,7 @@
 - [x] 新增 Testing Library setup file。
 - [ ] 新增 MSW browser/server test setup。
 - [ ] 新增 Playwright config。
+- [x] 測試 auth API client 使用 credentialed login request。
 - [ ] 測試 auth `401` redirect。
 - [ ] 測試 debounced save behavior。
 - [ ] 測試 failed save 會保留 local draft。
@@ -207,9 +208,9 @@
 - [ ] 新增 E2E：Markdown edit 與 save status。
 - [ ] 新增 E2E：JavaScript run output。
 - [ ] 新增 E2E：stopping long-running code。
-- [ ] 執行 `npm run lint`。
-- [ ] 執行 `npm run test`。
-- [ ] 執行 `npm run build`。
+- [x] 執行 `npm run lint`。
+- [x] 執行 `npm run test`。
+- [x] 執行 `npm run build`。
 - [ ] 需要 E2E 驗證時，本機或手動執行 `npm run test:e2e`。
 
 ## Phase 13：GitHub CI
