@@ -106,9 +106,9 @@
 - [x] 新增 chapter rename action。
 - [x] 新增 chapter collapse toggle。
 - [x] 新增 chapter delete confirmation。
-- [ ] 新增 lesson create action。
-- [ ] 新增 lesson rename action。
-- [ ] 新增 lesson delete confirmation。
+- [x] 新增 lesson create action。
+- [x] 新增 lesson rename action。
+- [x] 新增 lesson delete confirmation。
 - [x] 將後端 `400` validation message 顯示在對應 form 附近。
 - [x] mutation 成功後 invalidate 或更新 React Query cache。
 

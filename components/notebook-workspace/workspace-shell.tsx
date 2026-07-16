@@ -67,12 +67,14 @@ import { ApiError, codeNotebookApi } from "@/lib/code-notebook/api-client";
 import { codeNotebookQueryKeys } from "@/lib/code-notebook/query-keys";
 import type {
   Chapter,
+  CreateLessonInput,
   CreateNotebookInput,
   Lesson,
   LessonSummary,
   Notebook,
   NotebookTree,
   UpdateChapterInput,
+  UpdateLessonInput,
   UpdateNotebookInput,
   UUID,
 } from "@/lib/code-notebook/types";
@@ -84,6 +86,9 @@ type WorkspaceTreeActions = {
   onRenameChapter: (chapter: Chapter) => void;
   onToggleChapter: (chapter: Chapter) => void;
   onDeleteChapter: (chapter: Chapter) => void;
+  onCreateLesson: (chapter: Chapter) => void;
+  onRenameLesson: (lesson: LessonSummary) => void;
+  onDeleteLesson: (lesson: LessonSummary) => void;
 };
 type WorkspaceViewState = WorkspaceState & WorkspaceTreeActions;
 type WorkspaceLayoutState = WorkspaceViewState & {
@@ -91,6 +96,7 @@ type WorkspaceLayoutState = WorkspaceViewState & {
   onToggleSidebar: () => void;
 };
 type ChapterTitleInput = { title: string };
+type LessonTitleInput = { title: string };
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof ApiError ? error.message : fallback;
@@ -613,6 +619,183 @@ function DeleteChapterDialog({
   );
 }
 
+function LessonDialog({
+  mode,
+  lesson,
+  chapter,
+  open,
+  isSubmitting,
+  error,
+  onOpenChange,
+  onSubmit,
+}: {
+  mode: "create" | "edit";
+  lesson: LessonSummary | null;
+  chapter: Chapter | null;
+  open: boolean;
+  isSubmitting: boolean;
+  error: string | null;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (input: LessonTitleInput) => void;
+}) {
+  const dialogTitle = mode === "create" ? "新增 lesson" : "重新命名 lesson";
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      {open ? (
+        <LessonDialogForm
+          key={`${mode}-${lesson?.id ?? chapter?.id ?? "new"}`}
+          dialogTitle={dialogTitle}
+          mode={mode}
+          lesson={lesson}
+          chapter={chapter}
+          isSubmitting={isSubmitting}
+          error={error}
+          onOpenChange={onOpenChange}
+          onSubmit={onSubmit}
+        />
+      ) : null}
+    </Dialog>
+  );
+}
+
+function LessonDialogForm({
+  dialogTitle,
+  mode,
+  lesson,
+  chapter,
+  isSubmitting,
+  error,
+  onOpenChange,
+  onSubmit,
+}: {
+  dialogTitle: string;
+  mode: "create" | "edit";
+  lesson: LessonSummary | null;
+  chapter: Chapter | null;
+  isSubmitting: boolean;
+  error: string | null;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (input: LessonTitleInput) => void;
+}) {
+  const [title, setTitle] = useState(() =>
+    mode === "edit" && lesson ? lesson.title : "",
+  );
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  return (
+    <DialogContent>
+      <DialogHeader>
+        <DialogTitle>{dialogTitle}</DialogTitle>
+        <DialogDescription>
+          {mode === "create" && chapter
+            ? `會建立在「${chapter.title}」底下。`
+            : "只會修改 lesson 名稱，內容會在編輯器階段處理。"}
+        </DialogDescription>
+      </DialogHeader>
+      <form
+        className="space-y-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const normalizedTitle = title.trim();
+
+          if (!normalizedTitle) {
+            setLocalError("請輸入 lesson 名稱。");
+            return;
+          }
+
+          setLocalError(null);
+          onSubmit({ title: normalizedTitle });
+        }}
+      >
+        <div className="space-y-2">
+          <label className="text-sm font-medium" htmlFor="lesson-title">
+            名稱
+          </label>
+          <Input
+            id="lesson-title"
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="例如：1.1 變數"
+            aria-invalid={Boolean(localError || error)}
+            disabled={isSubmitting}
+          />
+        </div>
+        {localError || error ? (
+          <p className="text-sm text-destructive" role="alert">
+            {localError ?? error}
+          </p>
+        ) : null}
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={isSubmitting}
+          >
+            取消
+          </Button>
+          <Button type="submit" disabled={isSubmitting}>
+            {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : null}
+            {mode === "create" ? "建立" : "儲存"}
+          </Button>
+        </DialogFooter>
+      </form>
+    </DialogContent>
+  );
+}
+
+function DeleteLessonDialog({
+  lesson,
+  open,
+  isDeleting,
+  error,
+  onOpenChange,
+  onConfirm,
+}: {
+  lesson: LessonSummary | null;
+  open: boolean;
+  isDeleting: boolean;
+  error: string | null;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogMedia>
+            <AlertTriangle className="size-5 text-destructive" />
+          </AlertDialogMedia>
+          <AlertDialogTitle>刪除 lesson</AlertDialogTitle>
+          <AlertDialogDescription>
+            {lesson
+              ? `確定要刪除「${lesson.title}」嗎？這會移除文章、程式碼與輸出內容。`
+              : "確定要刪除這個 lesson 嗎？"}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        {error ? (
+          <p className="text-sm text-destructive" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={isDeleting}>取消</AlertDialogCancel>
+          <AlertDialogAction
+            type="button"
+            variant="destructive"
+            disabled={isDeleting}
+            onClick={onConfirm}
+          >
+            {isDeleting ? <Loader2 className="size-4 animate-spin" /> : null}
+            刪除
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 function EmptyState({
   icon: Icon,
   title,
@@ -680,6 +863,9 @@ function TreePanel({
   onRenameChapter,
   onToggleChapter,
   onDeleteChapter,
+  onCreateLesson,
+  onRenameLesson,
+  onDeleteLesson,
   onRetry,
 }: {
   tree: NotebookTree | null;
@@ -691,6 +877,9 @@ function TreePanel({
   onRenameChapter: (chapter: Chapter) => void;
   onToggleChapter: (chapter: Chapter) => void;
   onDeleteChapter: (chapter: Chapter) => void;
+  onCreateLesson: (chapter: Chapter) => void;
+  onRenameLesson: (lesson: LessonSummary) => void;
+  onDeleteLesson: (lesson: LessonSummary) => void;
   onRetry: () => void;
 }) {
   if (isLoading) {
@@ -766,6 +955,9 @@ function TreePanel({
               onRenameChapter={onRenameChapter}
               onToggleChapter={onToggleChapter}
               onDeleteChapter={onDeleteChapter}
+              onCreateLesson={onCreateLesson}
+              onRenameLesson={onRenameLesson}
+              onDeleteLesson={onDeleteLesson}
             />
           ))}
         </div>
@@ -781,6 +973,9 @@ function ChapterNode({
   onRenameChapter,
   onToggleChapter,
   onDeleteChapter,
+  onCreateLesson,
+  onRenameLesson,
+  onDeleteLesson,
 }: {
   chapter: Chapter;
   selectedLessonId: UUID | null;
@@ -788,6 +983,9 @@ function ChapterNode({
   onRenameChapter: (chapter: Chapter) => void;
   onToggleChapter: (chapter: Chapter) => void;
   onDeleteChapter: (chapter: Chapter) => void;
+  onCreateLesson: (chapter: Chapter) => void;
+  onRenameLesson: (lesson: LessonSummary) => void;
+  onDeleteLesson: (lesson: LessonSummary) => void;
 }) {
   const lessons = chapter.lessons ?? [];
 
@@ -821,14 +1019,14 @@ function ChapterNode({
                     type="button"
                     variant="ghost"
                     size="icon-xs"
+                    onClick={() => onCreateLesson(chapter)}
                     aria-label="新增 lesson"
-                    disabled
                   >
                     <Plus className="size-3.5" />
                   </Button>
                 }
               />
-              <TooltipContent>新增 lesson 會在下一階段接上</TooltipContent>
+              <TooltipContent>新增 lesson</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger
@@ -876,6 +1074,8 @@ function ChapterNode({
                 lesson={lesson}
                 isSelected={lesson.id === selectedLessonId}
                 onSelectLesson={onSelectLesson}
+                onRenameLesson={onRenameLesson}
+                onDeleteLesson={onDeleteLesson}
               />
             ))
           )}
@@ -889,24 +1089,68 @@ function LessonButton({
   lesson,
   isSelected,
   onSelectLesson,
+  onRenameLesson,
+  onDeleteLesson,
 }: {
   lesson: LessonSummary;
   isSelected: boolean;
   onSelectLesson: (lessonId: UUID) => void;
+  onRenameLesson: (lesson: LessonSummary) => void;
+  onDeleteLesson: (lesson: LessonSummary) => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={() => onSelectLesson(lesson.id)}
+    <div
       className={cn(
-        "flex min-h-9 w-full items-center gap-2 rounded-md px-2 text-left text-sm transition-colors hover:bg-accent",
+        "group/lesson flex min-h-9 w-full items-center gap-1 rounded-md px-1 text-sm transition-colors hover:bg-accent",
         isSelected && "bg-accent text-accent-foreground",
       )}
     >
-      <FileText className="size-4 shrink-0 text-muted-foreground" />
-      <span className="min-w-0 flex-1 truncate">{lesson.title}</span>
-      <span className="shrink-0 text-xs text-muted-foreground">{lesson.codeLanguage}</span>
-    </button>
+      <button
+        type="button"
+        onClick={() => onSelectLesson(lesson.id)}
+        className="flex min-w-0 flex-1 items-center gap-2 px-1 text-left"
+      >
+        <FileText className="size-4 shrink-0 text-muted-foreground" />
+        <span className="min-w-0 flex-1 truncate">{lesson.title}</span>
+        <span className="shrink-0 text-xs text-muted-foreground">{lesson.codeLanguage}</span>
+      </button>
+      <div className="flex shrink-0 items-center gap-0.5 opacity-100 md:opacity-0 md:transition-opacity md:group-hover/lesson:opacity-100">
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  onClick={() => onRenameLesson(lesson)}
+                  aria-label="重新命名 lesson"
+                >
+                  <Pencil className="size-3.5" />
+                </Button>
+              }
+            />
+            <TooltipContent>重新命名 lesson</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  onClick={() => onDeleteLesson(lesson)}
+                  aria-label="刪除 lesson"
+                >
+                  <Trash2 className="size-3.5" />
+                </Button>
+              }
+            />
+            <TooltipContent>刪除 lesson</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
+    </div>
   );
 }
 
@@ -1076,6 +1320,9 @@ function DesktopWorkspace(state: WorkspaceLayoutState) {
             onRenameChapter={state.onRenameChapter}
             onToggleChapter={state.onToggleChapter}
             onDeleteChapter={state.onDeleteChapter}
+            onCreateLesson={state.onCreateLesson}
+            onRenameLesson={state.onRenameLesson}
+            onDeleteLesson={state.onDeleteLesson}
             onRetry={() => state.treeQuery.refetch()}
           />
         </aside>
@@ -1138,6 +1385,9 @@ function MobileWorkspace(state: WorkspaceViewState) {
           onRenameChapter={state.onRenameChapter}
           onToggleChapter={state.onToggleChapter}
           onDeleteChapter={state.onDeleteChapter}
+          onCreateLesson={state.onCreateLesson}
+          onRenameLesson={state.onRenameLesson}
+          onDeleteLesson={state.onDeleteLesson}
           onRetry={() => state.treeQuery.refetch()}
         />
       </TabsContent>
@@ -1169,6 +1419,10 @@ export function WorkspaceShell() {
   const [isChapterDialogOpen, setIsChapterDialogOpen] = useState(false);
   const [isDeleteChapterOpen, setIsDeleteChapterOpen] = useState(false);
   const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null);
+  const [lessonDialogMode, setLessonDialogMode] = useState<"create" | "edit">("create");
+  const [isLessonDialogOpen, setIsLessonDialogOpen] = useState(false);
+  const [isDeleteLessonOpen, setIsDeleteLessonOpen] = useState(false);
+  const [selectedLessonSummary, setSelectedLessonSummary] = useState<LessonSummary | null>(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const selectedNotebook =
     state.notebooks.find((notebook) => notebook.id === state.selectedNotebookId) ?? null;
@@ -1281,6 +1535,51 @@ export function WorkspaceShell() {
       invalidateSelectedTree();
     },
   });
+  const createLessonMutation = useMutation({
+    mutationFn: codeNotebookApi.createLesson,
+    onSuccess: (data) => {
+      state.setSelectedLessonId(data.lesson.id);
+      setIsLessonDialogOpen(false);
+      setSelectedChapter(null);
+      setSelectedLessonSummary(null);
+      toast.success("Lesson 已建立");
+      invalidateSelectedTree();
+      void queryClient.invalidateQueries({
+        queryKey: codeNotebookQueryKeys.lessons.detail(data.lesson.id),
+      });
+    },
+  });
+  const updateLessonMutation = useMutation({
+    mutationFn: ({
+      lessonId,
+      input,
+    }: {
+      lessonId: UUID;
+      input: UpdateLessonInput;
+    }) => codeNotebookApi.updateLesson(lessonId, input),
+    onSuccess: (data) => {
+      setIsLessonDialogOpen(false);
+      setSelectedLessonSummary(null);
+      toast.success("Lesson 已更新");
+      invalidateSelectedTree();
+      void queryClient.invalidateQueries({
+        queryKey: codeNotebookQueryKeys.lessons.detail(data.lesson.id),
+      });
+    },
+  });
+  const deleteLessonMutation = useMutation({
+    mutationFn: codeNotebookApi.deleteLesson,
+    onSuccess: () => {
+      if (selectedLessonSummary?.id === state.selectedLessonId) {
+        state.setSelectedLessonId(null);
+      }
+
+      setIsDeleteLessonOpen(false);
+      setSelectedLessonSummary(null);
+      toast.success("Lesson 已刪除");
+      invalidateSelectedTree();
+    },
+  });
 
   const notebookDialogError =
     getErrorMessage(createNotebookMutation.error, "") ||
@@ -1296,6 +1595,13 @@ export function WorkspaceShell() {
   const deleteChapterError = getErrorMessage(deleteChapterMutation.error, "") || null;
   const isSubmittingChapter =
     createChapterMutation.isPending || updateChapterMutation.isPending;
+  const lessonDialogError =
+    getErrorMessage(createLessonMutation.error, "") ||
+    getErrorMessage(updateLessonMutation.error, "") ||
+    null;
+  const deleteLessonError = getErrorMessage(deleteLessonMutation.error, "") || null;
+  const isSubmittingLesson =
+    createLessonMutation.isPending || updateLessonMutation.isPending;
   const openCreateChapterDialog = () => {
     if (!state.selectedNotebookId) {
       return;
@@ -1319,6 +1625,27 @@ export function WorkspaceShell() {
     setSelectedChapter(chapter);
     setIsDeleteChapterOpen(true);
   };
+  const openCreateLessonDialog = (chapter: Chapter) => {
+    createLessonMutation.reset();
+    updateLessonMutation.reset();
+    setSelectedChapter(chapter);
+    setSelectedLessonSummary(null);
+    setLessonDialogMode("create");
+    setIsLessonDialogOpen(true);
+  };
+  const openRenameLessonDialog = (lesson: LessonSummary) => {
+    createLessonMutation.reset();
+    updateLessonMutation.reset();
+    setSelectedChapter(null);
+    setSelectedLessonSummary(lesson);
+    setLessonDialogMode("edit");
+    setIsLessonDialogOpen(true);
+  };
+  const openDeleteLessonDialog = (lesson: LessonSummary) => {
+    deleteLessonMutation.reset();
+    setSelectedLessonSummary(lesson);
+    setIsDeleteLessonOpen(true);
+  };
   const viewState: WorkspaceViewState = {
     ...state,
     onCreateChapter: openCreateChapterDialog,
@@ -1330,6 +1657,9 @@ export function WorkspaceShell() {
       });
     },
     onDeleteChapter: openDeleteChapterDialog,
+    onCreateLesson: openCreateLessonDialog,
+    onRenameLesson: openRenameLessonDialog,
+    onDeleteLesson: openDeleteLessonDialog,
   };
   const layoutState: WorkspaceLayoutState = {
     ...viewState,
@@ -1553,6 +1883,51 @@ export function WorkspaceShell() {
           }
 
           deleteChapterMutation.mutate(selectedChapter.id);
+        }}
+      />
+      <LessonDialog
+        mode={lessonDialogMode}
+        lesson={selectedLessonSummary}
+        chapter={selectedChapter}
+        open={isLessonDialogOpen}
+        isSubmitting={isSubmittingLesson}
+        error={lessonDialogError}
+        onOpenChange={setIsLessonDialogOpen}
+        onSubmit={(input) => {
+          if (lessonDialogMode === "create") {
+            if (!selectedChapter) {
+              return;
+            }
+
+            createLessonMutation.mutate({
+              chapterId: selectedChapter.id,
+              title: input.title,
+            } satisfies CreateLessonInput);
+            return;
+          }
+
+          if (!selectedLessonSummary) {
+            return;
+          }
+
+          updateLessonMutation.mutate({
+            lessonId: selectedLessonSummary.id,
+            input,
+          });
+        }}
+      />
+      <DeleteLessonDialog
+        lesson={selectedLessonSummary}
+        open={isDeleteLessonOpen}
+        isDeleting={deleteLessonMutation.isPending}
+        error={deleteLessonError}
+        onOpenChange={setIsDeleteLessonOpen}
+        onConfirm={() => {
+          if (!selectedLessonSummary) {
+            return;
+          }
+
+          deleteLessonMutation.mutate(selectedLessonSummary.id);
         }}
       />
     </div>
