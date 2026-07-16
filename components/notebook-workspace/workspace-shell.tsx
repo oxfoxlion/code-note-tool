@@ -1,12 +1,15 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import {
   AlertTriangle,
   BookOpen,
   Braces,
+  Check,
   ChevronDown,
   ChevronRight,
   CircleAlert,
+  Eraser,
   FileText,
   Folder,
   Loader2,
@@ -15,14 +18,17 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Pencil,
+  Play,
   Plus,
   RefreshCw,
+  Save,
+  Square,
   Terminal,
   Trash2,
 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -62,13 +68,14 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useNotebookWorkspace } from "@/hooks/use-notebook-workspace";
-import { ApiError, codeNotebookApi } from "@/lib/code-notebook/api-client";
-import { codeNotebookQueryKeys } from "@/lib/code-notebook/query-keys";
 import {
   MarkdownArticlePanel,
   type MarkdownArticleSaveController,
 } from "@/components/notebook-workspace/markdown-article-panel";
+import { useDebouncedSave, type DebouncedSaveStatus } from "@/hooks/use-debounced-save";
+import { useNotebookWorkspace } from "@/hooks/use-notebook-workspace";
+import { ApiError, codeNotebookApi } from "@/lib/code-notebook/api-client";
+import { codeNotebookQueryKeys } from "@/lib/code-notebook/query-keys";
 import type {
   Chapter,
   CreateLessonInput,
@@ -83,6 +90,19 @@ import type {
   UUID,
 } from "@/lib/code-notebook/types";
 import { cn } from "@/lib/utils";
+
+const JavaScriptEditor = dynamic(
+  () => import("./javascript-editor").then((mod) => mod.JavaScriptEditor),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="size-4 animate-spin" />
+        正在載入編輯器
+      </div>
+    ),
+  },
+);
 
 type WorkspaceState = ReturnType<typeof useNotebookWorkspace>;
 type WorkspaceTreeActions = {
@@ -100,6 +120,7 @@ type MarkdownSaveControllerHandler = (
 type WorkspaceViewState = WorkspaceState &
   WorkspaceTreeActions & {
     onMarkdownSaveControllerChange: MarkdownSaveControllerHandler;
+    onCodeSaveControllerChange: MarkdownSaveControllerHandler;
   };
 type WorkspaceLayoutState = WorkspaceViewState & {
   isSidebarCollapsed: boolean;
@@ -1186,31 +1207,206 @@ function PanelHeader({
   );
 }
 
-function CodePanel({ lesson }: { lesson: Lesson | null }) {
+function CodePanel({
+  lesson,
+  onSaveControllerChange,
+}: {
+  lesson: Lesson | null;
+  onSaveControllerChange: MarkdownSaveControllerHandler;
+}) {
+  if (!lesson) {
+    return (
+      <section className="flex h-full min-h-0 flex-col">
+        <PanelHeader icon={Braces} title="Code" description="JavaScript editor" />
+        <div className="min-h-0 flex-1">
+          <EmptyState
+            icon={Braces}
+            title="沒有程式碼內容"
+            description="選取 lesson 後會在這裡編輯 JavaScript。"
+          />
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <CodeEditorPanel
+      key={lesson.id}
+      lesson={lesson}
+      onSaveControllerChange={onSaveControllerChange}
+    />
+  );
+}
+
+function CodeEditorPanel({
+  lesson,
+  onSaveControllerChange,
+}: {
+  lesson: Lesson;
+  onSaveControllerChange: MarkdownSaveControllerHandler;
+}) {
+  const queryClient = useQueryClient();
+  const [codeContent, setCodeContent] = useState(lesson.codeContent);
+  const isDirty = codeContent !== lesson.codeContent;
+  const saveCode = useCallback(
+    (nextCodeContent: string) =>
+      codeNotebookApi.updateLesson(lesson.id, {
+        codeContent: nextCodeContent,
+      }),
+    [lesson.id],
+  );
+  const handleSavedCode = useCallback(
+    (saved: { lesson: Lesson }) => {
+      queryClient.setQueryData(
+        codeNotebookQueryKeys.lessons.detail(saved.lesson.id),
+        saved,
+      );
+    },
+    [queryClient],
+  );
+  const getSaveErrorMessage = useCallback(
+    (saveError: unknown) => getErrorMessage(saveError, "程式碼儲存失敗"),
+    [],
+  );
+  const codeSave = useDebouncedSave({
+    value: codeContent,
+    persistedValue: lesson.codeContent,
+    delayMs: 1000,
+    save: saveCode,
+    onSaved: handleSavedCode,
+    getErrorMessage: getSaveErrorMessage,
+  });
+
+  const saveNow = () => {
+    void codeSave.flush();
+  };
+
+  useEffect(() => {
+    return onSaveControllerChange({
+      flush: codeSave.flush,
+      hasPendingChanges: codeSave.hasPendingChanges,
+    });
+  }, [codeSave.flush, codeSave.hasPendingChanges, onSaveControllerChange]);
+
   return (
     <section className="flex h-full min-h-0 flex-col">
       <PanelHeader
         icon={Braces}
         title="Code"
-        description={lesson ? `${lesson.codeLanguage} / ${lesson.runtime}` : "JavaScript editor 骨架"}
+        description={`${lesson.codeLanguage} / ${lesson.runtime}`}
       />
+      <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b px-3">
+        <div className="flex min-w-0 items-center gap-1">
+          <Button
+            type="button"
+            size="sm"
+            disabled
+            title="JavaScript runner 會在 Phase 10 接上"
+          >
+            <Play className="size-4" />
+            Run
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled
+            title="JavaScript runner 會在 Phase 10 接上"
+          >
+            <Square className="size-4" />
+            Stop
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled
+            title="Output clear 會跟 runner 一起接上"
+          >
+            <Eraser className="size-4" />
+            Clear
+          </Button>
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={saveNow}
+          disabled={codeSave.status === "saving" || !isDirty}
+        >
+          {codeSave.status === "saving" ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : codeSave.status === "saved" && !isDirty ? (
+            <Check className="size-4" />
+          ) : (
+            <Save className="size-4" />
+          )}
+          Save
+        </Button>
+      </div>
       <div className="min-h-0 flex-1">
-        {lesson ? (
-          <ScrollArea className="h-full">
-            <pre className="min-h-full whitespace-pre-wrap bg-zinc-950 p-4 font-mono text-sm leading-6 text-zinc-100">
-              {lesson.codeContent || "// 這個 lesson 還沒有程式碼。"}
-            </pre>
-          </ScrollArea>
-        ) : (
-          <EmptyState
-            icon={Braces}
-            title="沒有程式碼內容"
-            description="選取 lesson 後，後續會在這裡接上 CodeMirror JavaScript editor。"
-          />
-        )}
+        <JavaScriptEditor value={codeContent} onChange={setCodeContent} />
+      </div>
+      <Separator />
+      <div className="flex h-8 shrink-0 items-center justify-between gap-3 px-3 text-xs text-muted-foreground">
+        <SaveStatus
+          status={codeSave.status}
+          errorMessage={codeSave.errorMessage}
+          isDirty={isDirty}
+          dirtyLabel="程式碼已修改，等待 autosave。"
+          idleLabel="JavaScript runner 尚未接上。"
+        />
+        <span className="shrink-0">{codeContent.length} chars</span>
       </div>
     </section>
   );
+}
+
+function SaveStatus({
+  status,
+  errorMessage,
+  isDirty,
+  dirtyLabel,
+  idleLabel,
+}: {
+  status: DebouncedSaveStatus;
+  errorMessage: string | null;
+  isDirty: boolean;
+  dirtyLabel: string;
+  idleLabel: string;
+}) {
+  if (status === "saving") {
+    return (
+      <span className="flex min-w-0 items-center gap-1 truncate">
+        <Loader2 className="size-3.5 shrink-0 animate-spin" />
+        正在儲存
+      </span>
+    );
+  }
+
+  if (status === "error") {
+    return (
+      <span className="flex min-w-0 items-center gap-1 truncate text-destructive">
+        <CircleAlert className="size-3.5 shrink-0" />
+        {errorMessage ?? "儲存失敗"}
+      </span>
+    );
+  }
+
+  if (isDirty) {
+    return <span className="truncate">{dirtyLabel}</span>;
+  }
+
+  if (status === "saved") {
+    return (
+      <span className="flex min-w-0 items-center gap-1 truncate">
+        <Check className="size-3.5 shrink-0" />
+        已儲存
+      </span>
+    );
+  }
+
+  return <span className="truncate">{idleLabel}</span>;
 }
 
 function OutputPanel({ lesson }: { lesson: Lesson | null }) {
@@ -1302,7 +1498,10 @@ function DesktopWorkspace(state: WorkspaceLayoutState) {
         <ResizablePanel defaultSize={48} minSize={32}>
           <ResizablePanelGroup orientation="vertical">
             <ResizablePanel defaultSize={58} minSize={35}>
-              <CodePanel lesson={state.lesson} />
+              <CodePanel
+                lesson={state.lesson}
+                onSaveControllerChange={state.onCodeSaveControllerChange}
+              />
             </ResizablePanel>
             <ResizableHandle withHandle />
             <ResizablePanel defaultSize={42} minSize={24}>
@@ -1363,7 +1562,10 @@ function MobileWorkspace(state: WorkspaceViewState) {
         />
       </TabsContent>
       <TabsContent value="code" className="min-h-0">
-        <CodePanel lesson={state.lesson} />
+        <CodePanel
+          lesson={state.lesson}
+          onSaveControllerChange={state.onCodeSaveControllerChange}
+        />
       </TabsContent>
       <TabsContent value="output" className="min-h-0">
         <OutputPanel lesson={state.lesson} />
@@ -1388,6 +1590,7 @@ export function WorkspaceShell() {
   const [selectedLessonSummary, setSelectedLessonSummary] = useState<LessonSummary | null>(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const markdownSaveControllersRef = useRef(new Set<MarkdownArticleSaveController>());
+  const codeSaveControllersRef = useRef(new Set<MarkdownArticleSaveController>());
   const selectedNotebook =
     state.notebooks.find((notebook) => notebook.id === state.selectedNotebookId) ?? null;
   const isInitialLoading = state.notebooksQuery.isLoading;
@@ -1411,8 +1614,20 @@ export function WorkspaceShell() {
     },
     [],
   );
+  const handleCodeSaveControllerChange = useCallback(
+    (controller: MarkdownArticleSaveController) => {
+      codeSaveControllersRef.current.add(controller);
+      return () => {
+        codeSaveControllersRef.current.delete(controller);
+      };
+    },
+    [],
+  );
   const flushPendingLessonSave = useCallback(async () => {
-    const controllers = Array.from(markdownSaveControllersRef.current);
+    const controllers = [
+      ...Array.from(markdownSaveControllersRef.current),
+      ...Array.from(codeSaveControllersRef.current),
+    ];
     const pendingControllers = controllers.filter((controller) =>
       controller.hasPendingChanges(),
     );
@@ -1687,6 +1902,7 @@ export function WorkspaceShell() {
     onRenameLesson: openRenameLessonDialog,
     onDeleteLesson: openDeleteLessonDialog,
     onMarkdownSaveControllerChange: handleMarkdownSaveControllerChange,
+    onCodeSaveControllerChange: handleCodeSaveControllerChange,
   };
   const layoutState: WorkspaceLayoutState = {
     ...viewState,

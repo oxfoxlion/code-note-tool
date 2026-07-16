@@ -133,19 +133,19 @@
 
 ## Phase 8：JavaScript Code Panel
 
-- [ ] 加入 CodeMirror JavaScript editor。
-- [ ] 加入控制：
+- [x] 加入 CodeMirror JavaScript editor。
+- [x] 加入控制：
   - Run
   - Stop
   - Clear Output
   - Save
-- [ ] 謹慎處理 lesson `autoRun`；lesson 與 sandbox 都 ready 前不要執行。
-- [ ] loading、hover、save 狀態切換時保持 editor 尺寸穩定。
+- [x] 謹慎處理 lesson `autoRun`；lesson 與 sandbox 都 ready 前不要執行。
+- [x] loading、hover、save 狀態切換時保持 editor 尺寸穩定。
 
 ## Phase 9：Autosave 與 Lesson 切換
 
 - [x] 實作 `use-debounced-save`。
-- [x] 使用 `updateLesson()` 儲存 Markdown edits；code edits 待 Phase 8 CodeMirror editor 接上後共用同一套儲存模式。
+- [x] 使用 `updateLesson()` 儲存 Markdown 與 code edits。
 - [x] autosave debounce 約 800-1500 ms。
 - [x] 顯示 `Saving`、`Saved`、`Save failed`。
 - [x] save 失敗時保留未儲存 editor state。
