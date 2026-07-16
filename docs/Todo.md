@@ -155,17 +155,17 @@
 
 ## Phase 10：瀏覽器 JavaScript Runner
 
-- [ ] 新增 runner types 與 event model。
-- [ ] 實作可 disposable 的 Web Worker runner。
-- [ ] 在 worker 端 patch `console.log`、`console.warn`、`console.error`。
-- [ ] 捕捉 runtime errors 與可用的 stack traces。
-- [ ] 追蹤 user code 建立的 timers。
-- [ ] stop 時清除 timers。
-- [ ] 強制 `maxRuntimeMs`，預設 10 秒。
-- [ ] 每次 run 之間 terminate 並重建 worker。
-- [ ] 執行期間在本地 append output。
-- [ ] run stop、timeout、error 或 finish 後再 persist output。
-- [ ] 不要每次 console event 都 persist output。
+- [x] 新增 runner types 與 event model。
+- [x] 實作可 disposable 的 Web Worker runner。
+- [x] 在 worker 端 patch `console.log`、`console.warn`、`console.error`。
+- [x] 捕捉 runtime errors 與可用的 stack traces。
+- [x] 追蹤 user code 建立的 timers。
+- [x] stop 時清除 timers。
+- [x] 強制 `maxRuntimeMs`，預設 10 秒。
+- [x] 每次 run 之間 terminate 並重建 worker。
+- [x] 執行期間在本地 append output。
+- [x] run stop、timeout、error 或 finish 後再 persist output。
+- [x] 不要每次 console event 都 persist output。
 
 ## Phase 11：錯誤處理與細節整理
 
@@ -202,7 +202,7 @@
 - [x] 測試 debounced save behavior。
 - [x] 測試 failed save 會保留 local draft。
 - [ ] 測試 lesson switch flush behavior。
-- [ ] 測試 runner stop 與 timeout behavior。
+- [x] 測試 runner stop 與 timeout behavior。
 - [ ] 測試 reorder rollback behavior。
 - [ ] 新增 E2E：unauthenticated redirect。
 - [ ] 新增 E2E：authenticated workspace load。

@@ -74,6 +74,9 @@ import {
 } from "@/components/notebook-workspace/markdown-article-panel";
 import { useDebouncedSave, type DebouncedSaveStatus } from "@/hooks/use-debounced-save";
 import { useNotebookWorkspace } from "@/hooks/use-notebook-workspace";
+import { runBrowserJavaScript } from "@/lib/code-runner/browser-runner";
+import { appendRunnerEventOutput } from "@/lib/code-runner/output";
+import type { DisposableRunner, RunnerEvent, RunnerStatus } from "@/lib/code-runner/types";
 import { ApiError, codeNotebookApi } from "@/lib/code-notebook/api-client";
 import { codeNotebookQueryKeys } from "@/lib/code-notebook/query-keys";
 import type {
@@ -121,6 +124,8 @@ type WorkspaceViewState = WorkspaceState &
   WorkspaceTreeActions & {
     onMarkdownSaveControllerChange: MarkdownSaveControllerHandler;
     onCodeSaveControllerChange: MarkdownSaveControllerHandler;
+    runnerOutputContent: string;
+    onRunnerOutputContentChange: (outputContent: string) => void;
   };
 type WorkspaceLayoutState = WorkspaceViewState & {
   isSidebarCollapsed: boolean;
@@ -1210,9 +1215,13 @@ function PanelHeader({
 function CodePanel({
   lesson,
   onSaveControllerChange,
+  outputContent,
+  onOutputContentChange,
 }: {
   lesson: Lesson | null;
   onSaveControllerChange: MarkdownSaveControllerHandler;
+  outputContent: string;
+  onOutputContentChange: (outputContent: string) => void;
 }) {
   if (!lesson) {
     return (
@@ -1234,6 +1243,8 @@ function CodePanel({
       key={lesson.id}
       lesson={lesson}
       onSaveControllerChange={onSaveControllerChange}
+      outputContent={outputContent}
+      onOutputContentChange={onOutputContentChange}
     />
   );
 }
@@ -1241,12 +1252,19 @@ function CodePanel({
 function CodeEditorPanel({
   lesson,
   onSaveControllerChange,
+  outputContent,
+  onOutputContentChange,
 }: {
   lesson: Lesson;
   onSaveControllerChange: MarkdownSaveControllerHandler;
+  outputContent: string;
+  onOutputContentChange: (outputContent: string) => void;
 }) {
   const queryClient = useQueryClient();
   const [codeContent, setCodeContent] = useState(lesson.codeContent);
+  const [runnerStatus, setRunnerStatus] = useState<RunnerStatus>("idle");
+  const runnerRef = useRef<DisposableRunner | null>(null);
+  const outputRef = useRef(outputContent);
   const isDirty = codeContent !== lesson.codeContent;
   const saveCode = useCallback(
     (nextCodeContent: string) =>
@@ -1276,9 +1294,106 @@ function CodeEditorPanel({
     onSaved: handleSavedCode,
     getErrorMessage: getSaveErrorMessage,
   });
+  const maxRuntimeMs = lesson.maxRuntimeMs || 10000;
+
+  useEffect(() => {
+    outputRef.current = outputContent;
+  }, [outputContent]);
+
+  useEffect(() => {
+    return () => {
+      runnerRef.current?.dispose();
+      runnerRef.current = null;
+    };
+  }, []);
+
+  const persistOutput = useCallback(
+    async (nextOutputContent: string) => {
+      try {
+        const saved = await codeNotebookApi.updateLessonOutput(
+          lesson.id,
+          nextOutputContent,
+        );
+        queryClient.setQueryData(
+          codeNotebookQueryKeys.lessons.detail(saved.lesson.id),
+          saved,
+        );
+      } catch (error) {
+        toast.error(getErrorMessage(error, "執行輸出儲存失敗"));
+      }
+    },
+    [lesson.id, queryClient],
+  );
+
+  const handleRunnerEvent = useCallback(
+    (event: RunnerEvent) => {
+      const nextOutputContent = appendRunnerEventOutput(outputRef.current, event);
+      outputRef.current = nextOutputContent;
+      onOutputContentChange(nextOutputContent);
+
+      if (event.type === "finish") {
+        setRunnerStatus("finished");
+        void persistOutput(nextOutputContent);
+        runnerRef.current = null;
+        return;
+      }
+
+      if (event.type === "stopped") {
+        setRunnerStatus("stopped");
+        void persistOutput(nextOutputContent);
+        runnerRef.current = null;
+        return;
+      }
+
+      if (event.type === "timeout") {
+        setRunnerStatus("timeout");
+        void persistOutput(nextOutputContent);
+        runnerRef.current = null;
+        return;
+      }
+
+      if (event.type === "error") {
+        setRunnerStatus("error");
+        void persistOutput(nextOutputContent);
+        runnerRef.current = null;
+      }
+    },
+    [onOutputContentChange, persistOutput],
+  );
 
   const saveNow = () => {
     void codeSave.flush();
+  };
+  const runCode = () => {
+    void (async () => {
+      const canRun = await codeSave.flush();
+      if (!canRun) {
+        toast.error("程式碼尚未儲存，請先處理儲存錯誤再執行。");
+        return;
+      }
+
+      runnerRef.current?.dispose();
+      outputRef.current = "";
+      onOutputContentChange("");
+      setRunnerStatus("running");
+      runnerRef.current = runBrowserJavaScript({
+        code: codeContent,
+        maxRuntimeMs,
+        onEvent: handleRunnerEvent,
+      });
+    })();
+  };
+  const stopCode = () => {
+    runnerRef.current?.stop();
+  };
+  const clearOutput = () => {
+    if (runnerStatus === "running") {
+      return;
+    }
+
+    outputRef.current = "";
+    onOutputContentChange("");
+    void persistOutput("");
   };
 
   useEffect(() => {
@@ -1300,18 +1415,22 @@ function CodeEditorPanel({
           <Button
             type="button"
             size="sm"
-            disabled
-            title="JavaScript runner 會在 Phase 10 接上"
+            onClick={runCode}
+            disabled={runnerStatus === "running" || codeSave.status === "saving"}
           >
-            <Play className="size-4" />
+            {runnerStatus === "running" ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Play className="size-4" />
+            )}
             Run
           </Button>
           <Button
             type="button"
             size="sm"
             variant="outline"
-            disabled
-            title="JavaScript runner 會在 Phase 10 接上"
+            onClick={stopCode}
+            disabled={runnerStatus !== "running"}
           >
             <Square className="size-4" />
             Stop
@@ -1320,8 +1439,8 @@ function CodeEditorPanel({
             type="button"
             size="sm"
             variant="outline"
-            disabled
-            title="Output clear 會跟 runner 一起接上"
+            onClick={clearOutput}
+            disabled={runnerStatus === "running" || outputContent.length === 0}
           >
             <Eraser className="size-4" />
             Clear
@@ -1354,7 +1473,7 @@ function CodeEditorPanel({
           errorMessage={codeSave.errorMessage}
           isDirty={isDirty}
           dirtyLabel="程式碼已修改，等待 autosave。"
-          idleLabel="JavaScript runner 尚未接上。"
+          idleLabel={getRunnerStatusLabel(runnerStatus, maxRuntimeMs)}
         />
         <span className="shrink-0">{codeContent.length} chars</span>
       </div>
@@ -1409,15 +1528,38 @@ function SaveStatus({
   return <span className="truncate">{idleLabel}</span>;
 }
 
-function OutputPanel({ lesson }: { lesson: Lesson | null }) {
+function getRunnerStatusLabel(status: RunnerStatus, maxRuntimeMs: number) {
+  switch (status) {
+    case "running":
+      return `執行中，最多 ${maxRuntimeMs} ms。`;
+    case "finished":
+      return "執行完成，輸出已儲存。";
+    case "stopped":
+      return "已停止，輸出已儲存。";
+    case "timeout":
+      return "執行逾時，輸出已儲存。";
+    case "error":
+      return "執行錯誤，輸出已儲存。";
+    case "idle":
+      return "準備執行 JavaScript。";
+  }
+}
+
+function OutputPanel({
+  lesson,
+  outputContent,
+}: {
+  lesson: Lesson | null;
+  outputContent: string;
+}) {
   return (
     <section className="flex h-full min-h-0 flex-col">
-      <PanelHeader icon={Terminal} title="Output" description="執行結果骨架" />
+      <PanelHeader icon={Terminal} title="Output" description="執行結果" />
       <div className="min-h-0 flex-1">
         {lesson ? (
           <ScrollArea className="h-full">
             <pre className="min-h-full whitespace-pre-wrap bg-zinc-950 p-4 font-mono text-sm leading-6 text-zinc-100">
-              {lesson.outputContent || "尚無輸出。"}
+              {outputContent || "尚無輸出。"}
             </pre>
           </ScrollArea>
         ) : (
@@ -1501,11 +1643,16 @@ function DesktopWorkspace(state: WorkspaceLayoutState) {
               <CodePanel
                 lesson={state.lesson}
                 onSaveControllerChange={state.onCodeSaveControllerChange}
+                outputContent={state.runnerOutputContent}
+                onOutputContentChange={state.onRunnerOutputContentChange}
               />
             </ResizablePanel>
             <ResizableHandle withHandle />
             <ResizablePanel defaultSize={42} minSize={24}>
-              <OutputPanel lesson={state.lesson} />
+              <OutputPanel
+                lesson={state.lesson}
+                outputContent={state.runnerOutputContent}
+              />
             </ResizablePanel>
           </ResizablePanelGroup>
         </ResizablePanel>
@@ -1565,10 +1712,12 @@ function MobileWorkspace(state: WorkspaceViewState) {
         <CodePanel
           lesson={state.lesson}
           onSaveControllerChange={state.onCodeSaveControllerChange}
+          outputContent={state.runnerOutputContent}
+          onOutputContentChange={state.onRunnerOutputContentChange}
         />
       </TabsContent>
       <TabsContent value="output" className="min-h-0">
-        <OutputPanel lesson={state.lesson} />
+        <OutputPanel lesson={state.lesson} outputContent={state.runnerOutputContent} />
       </TabsContent>
     </Tabs>
   );
@@ -1589,6 +1738,10 @@ export function WorkspaceShell() {
   const [isDeleteLessonOpen, setIsDeleteLessonOpen] = useState(false);
   const [selectedLessonSummary, setSelectedLessonSummary] = useState<LessonSummary | null>(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [runnerOutputDraft, setRunnerOutputDraft] = useState<{
+    lessonId: UUID;
+    outputContent: string;
+  } | null>(null);
   const markdownSaveControllersRef = useRef(new Set<MarkdownArticleSaveController>());
   const codeSaveControllersRef = useRef(new Set<MarkdownArticleSaveController>());
   const selectedNotebook =
@@ -1596,6 +1749,23 @@ export function WorkspaceShell() {
   const isInitialLoading = state.notebooksQuery.isLoading;
   const isRefreshing =
     state.notebooksQuery.isFetching || state.treeQuery.isFetching || state.lessonQuery.isFetching;
+  const runnerOutputContent =
+    runnerOutputDraft && runnerOutputDraft.lessonId === state.lesson?.id
+      ? runnerOutputDraft.outputContent
+      : state.lesson?.outputContent ?? "";
+  const handleRunnerOutputContentChange = useCallback(
+    (outputContent: string) => {
+      if (!state.selectedLessonId) {
+        return;
+      }
+
+      setRunnerOutputDraft({
+        lessonId: state.selectedLessonId,
+        outputContent,
+      });
+    },
+    [state.selectedLessonId],
+  );
   const invalidateSelectedTree = () => {
     if (!state.selectedNotebookId) {
       return;
@@ -1903,6 +2073,8 @@ export function WorkspaceShell() {
     onDeleteLesson: openDeleteLessonDialog,
     onMarkdownSaveControllerChange: handleMarkdownSaveControllerChange,
     onCodeSaveControllerChange: handleCodeSaveControllerChange,
+    runnerOutputContent,
+    onRunnerOutputContentChange: handleRunnerOutputContentChange,
   };
   const layoutState: WorkspaceLayoutState = {
     ...viewState,
