@@ -8,23 +8,12 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  ApiConnectionError,
-  ApiError,
-  authApi,
-} from "@/lib/code-notebook/api-client";
+import { authApi } from "@/lib/code-notebook/api-client";
+import { getApiErrorMessage } from "@/lib/code-notebook/errors";
 import { codeNotebookQueryKeys } from "@/lib/code-notebook/query-keys";
 import type { LoginInput, RequireTwoFactorResponse } from "@/lib/code-notebook/types";
 
 type LoginMode = "password" | "pin";
-
-function getErrorMessage(error: unknown) {
-  if (error instanceof ApiError || error instanceof ApiConnectionError) {
-    return error.message;
-  }
-
-  return "登入失敗，請稍後再試";
-}
 
 function createLoginInput(mode: LoginMode, values: LoginFormValues): LoginInput {
   if (mode === "password") {
@@ -92,7 +81,7 @@ export function LoginForm() {
       finishAuthentication(response.message);
     },
     onError: (error) => {
-      setFormError(getErrorMessage(error));
+      setFormError(getApiErrorMessage(error, "登入失敗，請稍後再試"));
     },
   });
 
@@ -112,7 +101,7 @@ export function LoginForm() {
       finishAuthentication(response.message);
     },
     onError: (error) => {
-      setFormError(getErrorMessage(error));
+      setFormError(getApiErrorMessage(error, "登入失敗，請稍後再試"));
     },
   });
 

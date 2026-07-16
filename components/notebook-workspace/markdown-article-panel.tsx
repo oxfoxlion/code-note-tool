@@ -10,7 +10,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useDebouncedSave } from "@/hooks/use-debounced-save";
-import { ApiError, codeNotebookApi } from "@/lib/code-notebook/api-client";
+import { codeNotebookApi } from "@/lib/code-notebook/api-client";
+import { getApiErrorMessage, getRetryableErrorMessage } from "@/lib/code-notebook/errors";
 import { codeNotebookQueryKeys } from "@/lib/code-notebook/query-keys";
 import type { Lesson } from "@/lib/code-notebook/types";
 import { cn } from "@/lib/utils";
@@ -34,10 +35,6 @@ export type MarkdownArticleSaveController = {
   flush: () => Promise<boolean>;
   hasPendingChanges: () => boolean;
 };
-
-function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof ApiError ? error.message : fallback;
-}
 
 function PanelHeader({
   title,
@@ -223,7 +220,7 @@ export function MarkdownArticlePanel({
         <PanelHeader title="Article" description="Markdown" />
         <div className="min-h-0 flex-1">
           <ErrorPanel
-            message={getErrorMessage(error, "Lesson 載入失敗")}
+            message={getRetryableErrorMessage(error, "Lesson 載入失敗")}
             onRetry={onRetry}
           />
         </div>
@@ -290,7 +287,7 @@ function MarkdownArticleEditor({
     [queryClient],
   );
   const getSaveErrorMessage = useCallback(
-    (saveError: unknown) => getErrorMessage(saveError, "Markdown 儲存失敗"),
+    (saveError: unknown) => getApiErrorMessage(saveError, "Markdown 儲存失敗"),
     [],
   );
   const markdownSave = useDebouncedSave({
@@ -314,7 +311,7 @@ function MarkdownArticleEditor({
       setPreviewHtml(result.html);
       setPreviewMarkdown(markdownToRender);
     } catch (renderPreviewError) {
-      setRenderError(getErrorMessage(renderPreviewError, "Markdown 預覽更新失敗"));
+      setRenderError(getApiErrorMessage(renderPreviewError, "Markdown 預覽更新失敗"));
     } finally {
       setIsRendering(false);
     }

@@ -77,7 +77,8 @@ import { useNotebookWorkspace } from "@/hooks/use-notebook-workspace";
 import { runBrowserJavaScript } from "@/lib/code-runner/browser-runner";
 import { appendRunnerEventOutput } from "@/lib/code-runner/output";
 import type { DisposableRunner, RunnerEvent, RunnerStatus } from "@/lib/code-runner/types";
-import { ApiError, codeNotebookApi } from "@/lib/code-notebook/api-client";
+import { codeNotebookApi } from "@/lib/code-notebook/api-client";
+import { getApiErrorMessage, getRetryableErrorMessage } from "@/lib/code-notebook/errors";
 import { codeNotebookQueryKeys } from "@/lib/code-notebook/query-keys";
 import type {
   Chapter,
@@ -133,10 +134,6 @@ type WorkspaceLayoutState = WorkspaceViewState & {
 };
 type ChapterTitleInput = { title: string };
 type LessonTitleInput = { title: string };
-
-function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof ApiError ? error.message : fallback;
-}
 
 function getNotebookTitle(notebooks: Notebook[], selectedNotebookId: UUID | null) {
   return notebooks.find((notebook) => notebook.id === selectedNotebookId)?.title ?? "尚未選擇筆記本";
@@ -925,7 +922,7 @@ function TreePanel({
   if (error) {
     return (
       <ErrorPanel
-        message={getErrorMessage(error, "章節載入失敗")}
+        message={getRetryableErrorMessage(error, "章節載入失敗")}
         onRetry={onRetry}
       />
     );
@@ -1028,19 +1025,28 @@ function ChapterNode({
   return (
     <section className="space-y-1">
       <div className="group flex min-h-8 items-center gap-1 rounded-md px-1 text-sm font-medium hover:bg-muted/60">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-xs"
-          onClick={() => onToggleChapter(chapter)}
-          aria-label={chapter.isCollapsed ? "展開章節" : "收合章節"}
-        >
-          {chapter.isCollapsed ? (
-            <ChevronRight className="size-3.5" />
-          ) : (
-            <ChevronDown className="size-3.5" />
-          )}
-        </Button>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  onClick={() => onToggleChapter(chapter)}
+                  aria-label={chapter.isCollapsed ? "展開章節" : "收合章節"}
+                >
+                  {chapter.isCollapsed ? (
+                    <ChevronRight className="size-3.5" />
+                  ) : (
+                    <ChevronDown className="size-3.5" />
+                  )}
+                </Button>
+              }
+            />
+            <TooltipContent>{chapter.isCollapsed ? "展開章節" : "收合章節"}</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
         <Folder className="size-4 shrink-0 text-muted-foreground" />
         <span className="min-w-0 flex-1 truncate">{chapter.title}</span>
         <Badge variant="outline" className="shrink-0">
@@ -1263,6 +1269,7 @@ function CodeEditorPanel({
   const queryClient = useQueryClient();
   const [codeContent, setCodeContent] = useState(lesson.codeContent);
   const [runnerStatus, setRunnerStatus] = useState<RunnerStatus>("idle");
+  const [isClearOutputOpen, setIsClearOutputOpen] = useState(false);
   const runnerRef = useRef<DisposableRunner | null>(null);
   const outputRef = useRef(outputContent);
   const isDirty = codeContent !== lesson.codeContent;
@@ -1283,7 +1290,7 @@ function CodeEditorPanel({
     [queryClient],
   );
   const getSaveErrorMessage = useCallback(
-    (saveError: unknown) => getErrorMessage(saveError, "程式碼儲存失敗"),
+    (saveError: unknown) => getApiErrorMessage(saveError, "程式碼儲存失敗"),
     [],
   );
   const codeSave = useDebouncedSave({
@@ -1319,7 +1326,7 @@ function CodeEditorPanel({
           saved,
         );
       } catch (error) {
-        toast.error(getErrorMessage(error, "執行輸出儲存失敗"));
+        toast.error(getApiErrorMessage(error, "執行輸出儲存失敗"));
       }
     },
     [lesson.id, queryClient],
@@ -1393,6 +1400,7 @@ function CodeEditorPanel({
 
     outputRef.current = "";
     onOutputContentChange("");
+    setIsClearOutputOpen(false);
     void persistOutput("");
   };
 
@@ -1439,7 +1447,7 @@ function CodeEditorPanel({
             type="button"
             size="sm"
             variant="outline"
-            onClick={clearOutput}
+            onClick={() => setIsClearOutputOpen(true)}
             disabled={runnerStatus === "running" || outputContent.length === 0}
           >
             <Eraser className="size-4" />
@@ -1477,6 +1485,25 @@ function CodeEditorPanel({
         />
         <span className="shrink-0">{codeContent.length} chars</span>
       </div>
+      <AlertDialog open={isClearOutputOpen} onOpenChange={setIsClearOutputOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogMedia>
+              <AlertTriangle className="size-5 text-destructive" />
+            </AlertDialogMedia>
+            <AlertDialogTitle>清除輸出</AlertDialogTitle>
+            <AlertDialogDescription>
+              確定要清除這個 lesson 的輸出內容嗎？這個動作會立即儲存。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction type="button" variant="destructive" onClick={clearOutput}>
+              清除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </section>
   );
 }
@@ -1926,7 +1953,7 @@ export function WorkspaceShell() {
       invalidateSelectedTree();
     },
     onError: (error) => {
-      toast.error(getErrorMessage(error, "章節收合狀態更新失敗"));
+      toast.error(getApiErrorMessage(error, "章節收合狀態更新失敗"));
     },
   });
   const deleteChapterMutation = useMutation({
@@ -1991,24 +2018,24 @@ export function WorkspaceShell() {
   });
 
   const notebookDialogError =
-    getErrorMessage(createNotebookMutation.error, "") ||
-    getErrorMessage(updateNotebookMutation.error, "") ||
+    getApiErrorMessage(createNotebookMutation.error, "") ||
+    getApiErrorMessage(updateNotebookMutation.error, "") ||
     null;
-  const deleteNotebookError = getErrorMessage(deleteNotebookMutation.error, "") || null;
+  const deleteNotebookError = getApiErrorMessage(deleteNotebookMutation.error, "") || null;
   const isSubmittingNotebook =
     createNotebookMutation.isPending || updateNotebookMutation.isPending;
   const chapterDialogError =
-    getErrorMessage(createChapterMutation.error, "") ||
-    getErrorMessage(updateChapterMutation.error, "") ||
+    getApiErrorMessage(createChapterMutation.error, "") ||
+    getApiErrorMessage(updateChapterMutation.error, "") ||
     null;
-  const deleteChapterError = getErrorMessage(deleteChapterMutation.error, "") || null;
+  const deleteChapterError = getApiErrorMessage(deleteChapterMutation.error, "") || null;
   const isSubmittingChapter =
     createChapterMutation.isPending || updateChapterMutation.isPending;
   const lessonDialogError =
-    getErrorMessage(createLessonMutation.error, "") ||
-    getErrorMessage(updateLessonMutation.error, "") ||
+    getApiErrorMessage(createLessonMutation.error, "") ||
+    getApiErrorMessage(updateLessonMutation.error, "") ||
     null;
-  const deleteLessonError = getErrorMessage(deleteLessonMutation.error, "") || null;
+  const deleteLessonError = getApiErrorMessage(deleteLessonMutation.error, "") || null;
   const isSubmittingLesson =
     createLessonMutation.isPending || updateLessonMutation.isPending;
   const openCreateChapterDialog = () => {
@@ -2089,7 +2116,7 @@ export function WorkspaceShell() {
   if (state.notebooksQuery.error) {
     return (
       <ErrorPanel
-        message={getErrorMessage(state.notebooksQuery.error, "筆記本載入失敗")}
+        message={getRetryableErrorMessage(state.notebooksQuery.error, "筆記本載入失敗")}
         onRetry={() => state.notebooksQuery.refetch()}
       />
     );

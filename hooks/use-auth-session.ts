@@ -5,12 +5,9 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { toast } from "sonner";
 
-import { ApiError, authApi } from "@/lib/code-notebook/api-client";
+import { authApi } from "@/lib/code-notebook/api-client";
+import { getApiErrorMessage, isUnauthorizedError } from "@/lib/code-notebook/errors";
 import { codeNotebookQueryKeys } from "@/lib/code-notebook/query-keys";
-
-export function isUnauthorizedError(error: unknown) {
-  return error instanceof ApiError && error.status === 401;
-}
 
 export function useAuthSession() {
   const pathname = usePathname();
@@ -47,8 +44,7 @@ export function useLogout() {
       router.replace("/login");
     },
     onError: (error) => {
-      const message = error instanceof ApiError ? error.message : "登出失敗";
-      toast.error(message);
+      toast.error(getApiErrorMessage(error, "登出失敗"));
     },
   });
 }

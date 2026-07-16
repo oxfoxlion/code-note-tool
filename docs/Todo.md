@@ -169,14 +169,14 @@
 
 ## Phase 11：錯誤處理與細節整理
 
-- [ ] 新增共用 API error handling helper。
-- [ ] 盡量全域處理 `401`。
-- [ ] 依 `docs/frontend-handoff/UI-SPEC.md` 處理 `400`、`404`、`500`。
-- [ ] destructive actions 需有 confirmation。
-- [ ] icon-only buttons 需有 tooltips。
-- [ ] 為沒有 notebooks、chapters、lessons 的狀態建立明確 empty states。
+- [x] 新增共用 API error handling helper。
+- [x] 盡量全域處理 `401`。
+- [x] 依 `docs/frontend-handoff/UI-SPEC.md` 處理 `400`、`404`、`500`。
+- [x] destructive actions 需有 confirmation。
+- [x] icon-only buttons 需有 tooltips。
+- [x] 為沒有 notebooks、chapters、lessons 的狀態建立明確 empty states。
 - [ ] 確認 responsive layout 沒有文字重疊。
-- [ ] 確認 UI 是密集、workspace-oriented，不是 landing page 風格。
+- [x] 確認 UI 是密集、workspace-oriented，不是 landing page 風格。
 
 ## Phase 12：測試
 
@@ -198,6 +198,7 @@
 - [ ] 新增 Playwright config。
 - [x] 測試 auth API client 使用 credentialed login request。
 - [ ] 測試 auth `401` redirect。
+- [x] 測試 API error helper。
 - [x] 測試 workspace 預設選取第一個可用 lesson 的 helper。
 - [x] 測試 debounced save behavior。
 - [x] 測試 failed save 會保留 local draft。

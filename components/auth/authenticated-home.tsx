@@ -4,12 +4,9 @@ import { BookOpen, Loader2, LogOut } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { WorkspaceShell } from "@/components/notebook-workspace/workspace-shell";
-import {
-  isUnauthorizedError,
-  useAuthSession,
-  useLogout,
-} from "@/hooks/use-auth-session";
+import { useAuthSession, useLogout } from "@/hooks/use-auth-session";
 import { ApiConnectionError } from "@/lib/code-notebook/api-client";
+import { isUnauthorizedError } from "@/lib/code-notebook/errors";
 
 export function AuthenticatedHome() {
   const { error, isLoading, user } = useAuthSession();

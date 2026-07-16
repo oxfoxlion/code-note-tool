@@ -3,7 +3,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
-import { ApiError, codeNotebookApi } from "@/lib/code-notebook/api-client";
+import { codeNotebookApi } from "@/lib/code-notebook/api-client";
+import { isNotFoundError } from "@/lib/code-notebook/errors";
 import { codeNotebookQueryKeys } from "@/lib/code-notebook/query-keys";
 import type { LessonSummary, NotebookTree, UUID } from "@/lib/code-notebook/types";
 
@@ -71,7 +72,7 @@ export function useNotebookWorkspace() {
       try {
         return await codeNotebookApi.getLesson(selectedLessonId as UUID);
       } catch (error) {
-        if (error instanceof ApiError && error.status === 404 && selectedLessonId) {
+        if (isNotFoundError(error) && selectedLessonId) {
           setInvalidLessonId(selectedLessonId);
           setRequestedLessonId(null);
           void treeQuery.refetch();
