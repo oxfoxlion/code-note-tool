@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -65,7 +65,10 @@ import {
 import { useNotebookWorkspace } from "@/hooks/use-notebook-workspace";
 import { ApiError, codeNotebookApi } from "@/lib/code-notebook/api-client";
 import { codeNotebookQueryKeys } from "@/lib/code-notebook/query-keys";
-import { MarkdownArticlePanel } from "@/components/notebook-workspace/markdown-article-panel";
+import {
+  MarkdownArticlePanel,
+  type MarkdownArticleSaveController,
+} from "@/components/notebook-workspace/markdown-article-panel";
 import type {
   Chapter,
   CreateLessonInput,
@@ -91,7 +94,13 @@ type WorkspaceTreeActions = {
   onRenameLesson: (lesson: LessonSummary) => void;
   onDeleteLesson: (lesson: LessonSummary) => void;
 };
-type WorkspaceViewState = WorkspaceState & WorkspaceTreeActions;
+type MarkdownSaveControllerHandler = (
+  controller: MarkdownArticleSaveController,
+) => () => void;
+type WorkspaceViewState = WorkspaceState &
+  WorkspaceTreeActions & {
+    onMarkdownSaveControllerChange: MarkdownSaveControllerHandler;
+  };
 type WorkspaceLayoutState = WorkspaceViewState & {
   isSidebarCollapsed: boolean;
   onToggleSidebar: () => void;
@@ -1286,6 +1295,7 @@ function DesktopWorkspace(state: WorkspaceLayoutState) {
             isLoading={state.lessonQuery.isLoading}
             error={state.lessonQuery.error}
             onRetry={() => state.lessonQuery.refetch()}
+            onSaveControllerChange={state.onMarkdownSaveControllerChange}
           />
         </ResizablePanel>
         <ResizableHandle withHandle />
@@ -1349,6 +1359,7 @@ function MobileWorkspace(state: WorkspaceViewState) {
           isLoading={state.lessonQuery.isLoading}
           error={state.lessonQuery.error}
           onRetry={() => state.lessonQuery.refetch()}
+          onSaveControllerChange={state.onMarkdownSaveControllerChange}
         />
       </TabsContent>
       <TabsContent value="code" className="min-h-0">
@@ -1376,6 +1387,7 @@ export function WorkspaceShell() {
   const [isDeleteLessonOpen, setIsDeleteLessonOpen] = useState(false);
   const [selectedLessonSummary, setSelectedLessonSummary] = useState<LessonSummary | null>(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const markdownSaveControllersRef = useRef(new Set<MarkdownArticleSaveController>());
   const selectedNotebook =
     state.notebooks.find((notebook) => notebook.id === state.selectedNotebookId) ?? null;
   const isInitialLoading = state.notebooksQuery.isLoading;
@@ -1390,6 +1402,66 @@ export function WorkspaceShell() {
       queryKey: codeNotebookQueryKeys.notebooks.tree(state.selectedNotebookId),
     });
   };
+  const handleMarkdownSaveControllerChange = useCallback(
+    (controller: MarkdownArticleSaveController) => {
+      markdownSaveControllersRef.current.add(controller);
+      return () => {
+        markdownSaveControllersRef.current.delete(controller);
+      };
+    },
+    [],
+  );
+  const flushPendingLessonSave = useCallback(async () => {
+    const controllers = Array.from(markdownSaveControllersRef.current);
+    const pendingControllers = controllers.filter((controller) =>
+      controller.hasPendingChanges(),
+    );
+
+    if (pendingControllers.length === 0) {
+      return true;
+    }
+
+    const saveResults = await Promise.all(
+      pendingControllers.map((controller) => controller.flush()),
+    );
+    const isSaved = saveResults.every(Boolean);
+    if (!isSaved) {
+      toast.error("目前 lesson 尚未儲存，請先處理儲存錯誤再切換。");
+    }
+
+    return isSaved;
+  }, []);
+  const selectLessonWithSaveGuard = useCallback(
+    (lessonId: UUID | null) => {
+      if (lessonId === state.selectedLessonId) {
+        return;
+      }
+
+      void (async () => {
+        const canSwitch = await flushPendingLessonSave();
+        if (canSwitch) {
+          state.setSelectedLessonId(lessonId);
+        }
+      })();
+    },
+    [flushPendingLessonSave, state],
+  );
+  const selectNotebookWithSaveGuard = useCallback(
+    (notebookId: UUID | null) => {
+      if (notebookId === state.selectedNotebookId) {
+        return;
+      }
+
+      void (async () => {
+        const canSwitch = await flushPendingLessonSave();
+        if (canSwitch) {
+          state.setSelectedNotebookId(notebookId);
+          state.setSelectedLessonId(null);
+        }
+      })();
+    },
+    [flushPendingLessonSave, state],
+  );
   const createNotebookMutation = useMutation({
     mutationFn: codeNotebookApi.createNotebook,
     onSuccess: (data) => {
@@ -1600,6 +1672,8 @@ export function WorkspaceShell() {
   };
   const viewState: WorkspaceViewState = {
     ...state,
+    setSelectedLessonId: selectLessonWithSaveGuard,
+    setSelectedNotebookId: selectNotebookWithSaveGuard,
     onCreateChapter: openCreateChapterDialog,
     onRenameChapter: openRenameChapterDialog,
     onToggleChapter: (chapter) => {
@@ -1612,6 +1686,7 @@ export function WorkspaceShell() {
     onCreateLesson: openCreateLessonDialog,
     onRenameLesson: openRenameLessonDialog,
     onDeleteLesson: openDeleteLessonDialog,
+    onMarkdownSaveControllerChange: handleMarkdownSaveControllerChange,
   };
   const layoutState: WorkspaceLayoutState = {
     ...viewState,
@@ -1705,10 +1780,7 @@ export function WorkspaceShell() {
       <WorkspaceToolbar
         notebooks={state.notebooks}
         selectedNotebookId={state.selectedNotebookId}
-        onSelectNotebook={(notebookId) => {
-          state.setSelectedNotebookId(notebookId);
-          state.setSelectedLessonId(null);
-        }}
+        onSelectNotebook={selectNotebookWithSaveGuard}
         onCreateNotebook={() => {
           createNotebookMutation.reset();
           updateNotebookMutation.reset();

@@ -1,14 +1,17 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { Eye, FileText, Loader2, Pencil, RefreshCw, RotateCcw, TriangleAlert } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Check, Eye, FileText, Loader2, Pencil, RefreshCw, RotateCcw, Save, TriangleAlert } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useDebouncedSave } from "@/hooks/use-debounced-save";
 import { ApiError, codeNotebookApi } from "@/lib/code-notebook/api-client";
+import { codeNotebookQueryKeys } from "@/lib/code-notebook/query-keys";
 import type { Lesson } from "@/lib/code-notebook/types";
 import { cn } from "@/lib/utils";
 
@@ -26,6 +29,11 @@ const MarkdownEditor = dynamic(
 );
 
 type ArticleMode = "edit" | "preview";
+
+export type MarkdownArticleSaveController = {
+  flush: () => Promise<boolean>;
+  hasPendingChanges: () => boolean;
+};
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof ApiError ? error.message : fallback;
@@ -190,11 +198,13 @@ export function MarkdownArticlePanel({
   isLoading,
   error,
   onRetry,
+  onSaveControllerChange,
 }: {
   lesson: Lesson | null;
   isLoading: boolean;
   error: unknown;
   onRetry: () => void;
+  onSaveControllerChange?: (controller: MarkdownArticleSaveController) => () => void;
 }) {
   if (isLoading) {
     return (
@@ -232,10 +242,23 @@ export function MarkdownArticlePanel({
     );
   }
 
-  return <MarkdownArticleEditor key={lesson.id} lesson={lesson} />;
+  return (
+    <MarkdownArticleEditor
+      key={lesson.id}
+      lesson={lesson}
+      onSaveControllerChange={onSaveControllerChange}
+    />
+  );
 }
 
-function MarkdownArticleEditor({ lesson }: { lesson: Lesson }) {
+function MarkdownArticleEditor({
+  lesson,
+  onSaveControllerChange,
+}: {
+  lesson: Lesson;
+  onSaveControllerChange?: (controller: MarkdownArticleSaveController) => () => void;
+}) {
+  const queryClient = useQueryClient();
   const [mode, setMode] = useState<ArticleMode>("preview");
   const [markdownContent, setMarkdownContent] = useState(lesson.markdownContent);
   const [previewHtml, setPreviewHtml] = useState(lesson.htmlContent);
@@ -248,6 +271,36 @@ function MarkdownArticleEditor({ lesson }: { lesson: Lesson }) {
     () => (isDirty ? `${lesson.title} / 未儲存草稿` : lesson.title),
     [isDirty, lesson.title],
   );
+  const saveMarkdown = useCallback(
+    (nextMarkdownContent: string) =>
+      codeNotebookApi.updateLesson(lesson.id, {
+        markdownContent: nextMarkdownContent,
+      }),
+    [lesson.id],
+  );
+  const handleSavedMarkdown = useCallback(
+    (saved: { lesson: Lesson }, savedMarkdownContent: string) => {
+      queryClient.setQueryData(
+        codeNotebookQueryKeys.lessons.detail(saved.lesson.id),
+        saved,
+      );
+      setPreviewHtml(saved.lesson.htmlContent);
+      setPreviewMarkdown(savedMarkdownContent);
+    },
+    [queryClient],
+  );
+  const getSaveErrorMessage = useCallback(
+    (saveError: unknown) => getErrorMessage(saveError, "Markdown 儲存失敗"),
+    [],
+  );
+  const markdownSave = useDebouncedSave({
+    value: markdownContent,
+    persistedValue: lesson.markdownContent,
+    delayMs: 1000,
+    save: saveMarkdown,
+    onSaved: handleSavedMarkdown,
+    getErrorMessage: getSaveErrorMessage,
+  });
 
   const refreshPreview = async () => {
     const markdownToRender = markdownContent;
@@ -275,6 +328,21 @@ function MarkdownArticleEditor({ lesson }: { lesson: Lesson }) {
       void refreshPreview();
     }
   };
+
+  const saveNow = () => {
+    void markdownSave.flush();
+  };
+
+  useEffect(() => {
+    if (!onSaveControllerChange) {
+      return;
+    }
+
+    return onSaveControllerChange({
+      flush: markdownSave.flush,
+      hasPendingChanges: markdownSave.hasPendingChanges,
+    });
+  }, [markdownSave.flush, markdownSave.hasPendingChanges, onSaveControllerChange]);
 
   return (
     <section className="flex h-full min-h-0 flex-col">
@@ -310,6 +378,22 @@ function MarkdownArticleEditor({ lesson }: { lesson: Lesson }) {
             )}
             預覽
           </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={saveNow}
+            disabled={markdownSave.status === "saving" || !isDirty}
+          >
+            {markdownSave.status === "saving" ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : markdownSave.status === "saved" && !isDirty ? (
+              <Check className="size-4" />
+            ) : (
+              <Save className="size-4" />
+            )}
+            儲存
+          </Button>
         </div>
       </PanelHeader>
       <div className="min-h-0 flex-1">
@@ -328,11 +412,56 @@ function MarkdownArticleEditor({ lesson }: { lesson: Lesson }) {
       </div>
       <Separator />
       <div className="flex h-8 shrink-0 items-center justify-between gap-3 px-3 text-xs text-muted-foreground">
-        <span className="truncate">
-          {isDirty ? "目前變更只在本機草稿，儲存會在 autosave 階段接上。" : "Preview 使用後端渲染 HTML。"}
-        </span>
+        <SaveStatus
+          status={markdownSave.status}
+          errorMessage={markdownSave.errorMessage}
+          isDirty={isDirty}
+        />
         <span className="shrink-0">{markdownContent.length} chars</span>
       </div>
     </section>
   );
+}
+
+function SaveStatus({
+  status,
+  errorMessage,
+  isDirty,
+}: {
+  status: "idle" | "saving" | "saved" | "error";
+  errorMessage: string | null;
+  isDirty: boolean;
+}) {
+  if (status === "saving") {
+    return (
+      <span className="flex min-w-0 items-center gap-1 truncate">
+        <Loader2 className="size-3.5 shrink-0 animate-spin" />
+        正在儲存
+      </span>
+    );
+  }
+
+  if (status === "error") {
+    return (
+      <span className="flex min-w-0 items-center gap-1 truncate text-destructive">
+        <TriangleAlert className="size-3.5 shrink-0" />
+        {errorMessage ?? "儲存失敗"}
+      </span>
+    );
+  }
+
+  if (isDirty) {
+    return <span className="truncate">已修改，等待 autosave。</span>;
+  }
+
+  if (status === "saved") {
+    return (
+      <span className="flex min-w-0 items-center gap-1 truncate">
+        <Check className="size-3.5 shrink-0" />
+        已儲存
+      </span>
+    );
+  }
+
+  return <span className="truncate">Preview 使用後端渲染 HTML。</span>;
 }

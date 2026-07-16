@@ -144,14 +144,14 @@
 
 ## Phase 9：Autosave 與 Lesson 切換
 
-- [ ] 實作 `use-debounced-save`。
-- [ ] 使用 `updateLesson()` 儲存 Markdown 與 code edits。
-- [ ] autosave debounce 約 800-1500 ms。
-- [ ] 顯示 `Saving`、`Saved`、`Save failed`。
-- [ ] save 失敗時保留未儲存 editor state。
-- [ ] lesson 切換前盡可能 flush pending changes。
-- [ ] flush 失敗時阻止或警告 lesson switch。
-- [ ] 避免 background refetch 覆蓋 dirty local drafts。
+- [x] 實作 `use-debounced-save`。
+- [x] 使用 `updateLesson()` 儲存 Markdown edits；code edits 待 Phase 8 CodeMirror editor 接上後共用同一套儲存模式。
+- [x] autosave debounce 約 800-1500 ms。
+- [x] 顯示 `Saving`、`Saved`、`Save failed`。
+- [x] save 失敗時保留未儲存 editor state。
+- [x] lesson 切換前盡可能 flush pending changes。
+- [x] flush 失敗時阻止或警告 lesson switch。
+- [x] 避免 background refetch 覆蓋 dirty local drafts。
 
 ## Phase 10：瀏覽器 JavaScript Runner
 
@@ -199,8 +199,8 @@
 - [x] 測試 auth API client 使用 credentialed login request。
 - [ ] 測試 auth `401` redirect。
 - [x] 測試 workspace 預設選取第一個可用 lesson 的 helper。
-- [ ] 測試 debounced save behavior。
-- [ ] 測試 failed save 會保留 local draft。
+- [x] 測試 debounced save behavior。
+- [x] 測試 failed save 會保留 local draft。
 - [ ] 測試 lesson switch flush behavior。
 - [ ] 測試 runner stop 與 timeout behavior。
 - [ ] 測試 reorder rollback behavior。
