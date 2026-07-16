@@ -82,6 +82,7 @@
   - code panel
   - output panel
 - [x] 建立窄螢幕 tab layout。
+- [x] 將桌面 notebook tree 改為較寬、可收合的 sidebar。
 - [x] 加入 loading 與 empty states。
 - [x] 確保所有 icon 都來自 `lucide-react`。
 - [x] 確認沒有新增手寫 SVG。

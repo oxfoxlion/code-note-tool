@@ -12,6 +12,8 @@ import {
   Loader2,
   NotebookTabs,
   PanelBottom,
+  PanelLeftClose,
+  PanelLeftOpen,
   Pencil,
   Plus,
   RefreshCw,
@@ -84,6 +86,10 @@ type WorkspaceTreeActions = {
   onDeleteChapter: (chapter: Chapter) => void;
 };
 type WorkspaceViewState = WorkspaceState & WorkspaceTreeActions;
+type WorkspaceLayoutState = WorkspaceViewState & {
+  isSidebarCollapsed: boolean;
+  onToggleSidebar: () => void;
+};
 type ChapterTitleInput = { title: string };
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -101,6 +107,8 @@ function WorkspaceToolbar({
   onCreateNotebook,
   onEditNotebook,
   onDeleteNotebook,
+  isSidebarCollapsed,
+  onToggleSidebar,
   onRefresh,
   isRefreshing,
 }: {
@@ -110,6 +118,8 @@ function WorkspaceToolbar({
   onCreateNotebook: () => void;
   onEditNotebook: () => void;
   onDeleteNotebook: () => void;
+  isSidebarCollapsed: boolean;
+  onToggleSidebar: () => void;
   onRefresh: () => void;
   isRefreshing: boolean;
 }) {
@@ -118,6 +128,31 @@ function WorkspaceToolbar({
   return (
     <div className="flex min-h-12 items-center justify-between gap-2 border-b bg-background px-3 py-2">
       <div className="flex min-w-0 items-center gap-2">
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={onToggleSidebar}
+                  className="hidden md:inline-flex"
+                  aria-label={isSidebarCollapsed ? "展開側邊欄" : "收合側邊欄"}
+                >
+                  {isSidebarCollapsed ? (
+                    <PanelLeftOpen className="size-4" />
+                  ) : (
+                    <PanelLeftClose className="size-4" />
+                  )}
+                </Button>
+              }
+            />
+            <TooltipContent>
+              {isSidebarCollapsed ? "展開側邊欄" : "收合側邊欄"}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
         <NotebookTabs className="size-4 shrink-0 text-muted-foreground" />
         <select
           value={selectedNotebookId ?? ""}
@@ -191,27 +226,27 @@ function WorkspaceToolbar({
             <TooltipContent>刪除筆記本</TooltipContent>
           </Tooltip>
           <Separator orientation="vertical" className="mx-1 h-5" />
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                onClick={onRefresh}
-                disabled={isRefreshing}
-                aria-label="重新整理工作區"
-              >
-                {isRefreshing ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="size-4" />
-                )}
-              </Button>
-            }
-          />
-          <TooltipContent>重新整理工作區</TooltipContent>
-        </Tooltip>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={onRefresh}
+                  disabled={isRefreshing}
+                  aria-label="重新整理工作區"
+                >
+                  {isRefreshing ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="size-4" />
+                  )}
+                </Button>
+              }
+            />
+            <TooltipContent>重新整理工作區</TooltipContent>
+          </Tooltip>
         </div>
       </TooltipProvider>
     </div>
@@ -996,45 +1031,78 @@ function OutputPanel({ lesson }: { lesson: Lesson | null }) {
   );
 }
 
-function DesktopWorkspace(state: WorkspaceViewState) {
+function DesktopSidebarRail({ onToggleSidebar }: { onToggleSidebar: () => void }) {
   return (
-    <ResizablePanelGroup orientation="horizontal" className="hidden min-h-0 flex-1 md:flex">
-      <ResizablePanel defaultSize={22} minSize={16} maxSize={32}>
-        <TreePanel
-          tree={state.tree}
-          isLoading={state.treeQuery.isLoading}
-          error={state.treeQuery.error}
-          selectedLessonId={state.selectedLessonId}
-          onSelectLesson={state.setSelectedLessonId}
-          onCreateChapter={state.onCreateChapter}
-          onRenameChapter={state.onRenameChapter}
-          onToggleChapter={state.onToggleChapter}
-          onDeleteChapter={state.onDeleteChapter}
-          onRetry={() => state.treeQuery.refetch()}
-        />
-      </ResizablePanel>
-      <ResizableHandle withHandle />
-      <ResizablePanel defaultSize={38} minSize={24}>
-        <ArticlePanel
-          lesson={state.lesson}
-          isLoading={state.lessonQuery.isLoading}
-          error={state.lessonQuery.error}
-          onRetry={() => state.lessonQuery.refetch()}
-        />
-      </ResizablePanel>
-      <ResizableHandle withHandle />
-      <ResizablePanel defaultSize={40} minSize={24}>
-        <ResizablePanelGroup orientation="vertical">
-          <ResizablePanel defaultSize={58} minSize={35}>
-            <CodePanel lesson={state.lesson} />
-          </ResizablePanel>
-          <ResizableHandle withHandle />
-          <ResizablePanel defaultSize={42} minSize={24}>
-            <OutputPanel lesson={state.lesson} />
-          </ResizablePanel>
-        </ResizablePanelGroup>
-      </ResizablePanel>
-    </ResizablePanelGroup>
+    <aside className="hidden w-12 shrink-0 flex-col items-center border-r bg-background py-2 md:flex">
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={onToggleSidebar}
+                aria-label="展開側邊欄"
+              >
+                <PanelLeftOpen className="size-4" />
+              </Button>
+            }
+          />
+          <TooltipContent side="right">展開側邊欄</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+      <div className="mt-2 flex size-8 items-center justify-center rounded-md border bg-muted">
+        <Folder className="size-4 text-muted-foreground" />
+      </div>
+    </aside>
+  );
+}
+
+function DesktopWorkspace(state: WorkspaceLayoutState) {
+  return (
+    <div className="hidden min-h-0 flex-1 overflow-hidden md:flex">
+      {state.isSidebarCollapsed ? (
+        <DesktopSidebarRail onToggleSidebar={state.onToggleSidebar} />
+      ) : (
+        <aside className="flex w-[340px] shrink-0 flex-col border-r bg-background">
+          <TreePanel
+            tree={state.tree}
+            isLoading={state.treeQuery.isLoading}
+            error={state.treeQuery.error}
+            selectedLessonId={state.selectedLessonId}
+            onSelectLesson={state.setSelectedLessonId}
+            onCreateChapter={state.onCreateChapter}
+            onRenameChapter={state.onRenameChapter}
+            onToggleChapter={state.onToggleChapter}
+            onDeleteChapter={state.onDeleteChapter}
+            onRetry={() => state.treeQuery.refetch()}
+          />
+        </aside>
+      )}
+      <ResizablePanelGroup orientation="horizontal" className="min-w-0 flex-1 overflow-hidden">
+        <ResizablePanel defaultSize={52} minSize={32}>
+          <ArticlePanel
+            lesson={state.lesson}
+            isLoading={state.lessonQuery.isLoading}
+            error={state.lessonQuery.error}
+            onRetry={() => state.lessonQuery.refetch()}
+          />
+        </ResizablePanel>
+        <ResizableHandle withHandle />
+        <ResizablePanel defaultSize={48} minSize={32}>
+          <ResizablePanelGroup orientation="vertical">
+            <ResizablePanel defaultSize={58} minSize={35}>
+              <CodePanel lesson={state.lesson} />
+            </ResizablePanel>
+            <ResizableHandle withHandle />
+            <ResizablePanel defaultSize={42} minSize={24}>
+              <OutputPanel lesson={state.lesson} />
+            </ResizablePanel>
+          </ResizablePanelGroup>
+        </ResizablePanel>
+      </ResizablePanelGroup>
+    </div>
   );
 }
 
@@ -1101,6 +1169,7 @@ export function WorkspaceShell() {
   const [isChapterDialogOpen, setIsChapterDialogOpen] = useState(false);
   const [isDeleteChapterOpen, setIsDeleteChapterOpen] = useState(false);
   const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const selectedNotebook =
     state.notebooks.find((notebook) => notebook.id === state.selectedNotebookId) ?? null;
   const isInitialLoading = state.notebooksQuery.isLoading;
@@ -1262,6 +1331,11 @@ export function WorkspaceShell() {
     },
     onDeleteChapter: openDeleteChapterDialog,
   };
+  const layoutState: WorkspaceLayoutState = {
+    ...viewState,
+    isSidebarCollapsed,
+    onToggleSidebar: () => setIsSidebarCollapsed((value) => !value),
+  };
 
   if (isInitialLoading) {
     return <LoadingPanel label="正在載入工作區" />;
@@ -1278,7 +1352,7 @@ export function WorkspaceShell() {
 
   if (state.notebooks.length === 0) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <WorkspaceToolbar
           notebooks={state.notebooks}
           selectedNotebookId={state.selectedNotebookId}
@@ -1307,6 +1381,8 @@ export function WorkspaceShell() {
             deleteNotebookMutation.reset();
             setIsDeleteNotebookOpen(true);
           }}
+          isSidebarCollapsed={isSidebarCollapsed}
+          onToggleSidebar={() => setIsSidebarCollapsed((value) => !value)}
           onRefresh={() => state.notebooksQuery.refetch()}
           isRefreshing={isRefreshing}
         />
@@ -1343,7 +1419,7 @@ export function WorkspaceShell() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <WorkspaceToolbar
         notebooks={state.notebooks}
         selectedNotebookId={state.selectedNotebookId}
@@ -1375,6 +1451,8 @@ export function WorkspaceShell() {
           deleteNotebookMutation.reset();
           setIsDeleteNotebookOpen(true);
         }}
+        isSidebarCollapsed={isSidebarCollapsed}
+        onToggleSidebar={() => setIsSidebarCollapsed((value) => !value)}
         onRefresh={() => {
           state.notebooksQuery.refetch();
           state.treeQuery.refetch();
@@ -1394,7 +1472,7 @@ export function WorkspaceShell() {
           </>
         ) : null}
       </div>
-      <DesktopWorkspace {...viewState} />
+      <DesktopWorkspace {...layoutState} />
       <MobileWorkspace {...viewState} />
       <NotebookDialog
         mode={notebookDialogMode}

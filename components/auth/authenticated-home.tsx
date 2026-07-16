@@ -43,8 +43,8 @@ export function AuthenticatedHome() {
   }
 
   return (
-    <main className="flex min-h-dvh flex-col bg-background">
-      <header className="flex h-14 items-center justify-between border-b px-4">
+    <main className="flex h-dvh min-h-0 flex-col overflow-hidden bg-background">
+      <header className="flex h-14 shrink-0 items-center justify-between border-b px-4">
         <div className="flex items-center gap-2">
           <BookOpen className="size-4" />
           <span className="text-sm font-medium">Code Notebook</span>
