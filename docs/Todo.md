@@ -217,14 +217,14 @@
 
 ## Phase 13：GitHub CI
 
-- [ ] 新增 `.github/workflows/ci.yml`。
-- [ ] CI 使用 `npm ci`。
-- [ ] 新增 lint job。
-- [ ] 新增透過 `npm run test` 執行單元與元件測試的 job。
-- [ ] 新增 production build job。
-- [ ] 確保 CI 不執行 Playwright 或其他 E2E tests。
-- [ ] 確保 CI 不需要 production credentials。
-- [ ] 文件化 CI 所需環境變數。
+- [x] 新增 `.github/workflows/ci.yml`。
+- [x] CI 使用 `npm ci`。
+- [x] 新增 lint job。
+- [x] 新增透過 `npm run test` 執行單元與元件測試的 job。
+- [x] 新增 production build job。
+- [x] 確保 CI 不執行 Playwright 或其他 E2E tests。
+- [x] 確保 CI 不需要 production credentials。
+- [x] 文件化 CI 所需環境變數：CI 只設定 public placeholder `NEXT_PUBLIC_API_BASE_URL=http://localhost:3001`，不需要 production credentials。
 - [ ] repo 準備好後，將 CI 設為 GitHub branch protection required check。
 
 ## Phase 14：最終驗證
